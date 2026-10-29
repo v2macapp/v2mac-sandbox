@@ -36,7 +36,7 @@ jobs:
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        with: { repository: LordVersA/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
+        with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: sandbox/Scripts/build-agent.sh && sandbox/Scripts/build-kernel.sh && sandbox/Scripts/build-rootfs.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -65,7 +65,7 @@ jobs:
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        with: { repository: LordVersA/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
+        with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - uses: actions/download-artifact@v4
         with: { name: image, path: sandbox/out }
       - uses: actions/download-artifact@v4

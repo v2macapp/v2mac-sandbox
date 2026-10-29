@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/LordVersA/v2mac/main/docs/images/banner.jpg" alt="V2Mac" width="720"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/v2macapp/v2mac/main/docs/images/banner.jpg" alt="V2Mac" width="720"></p>
 
 <h1 align="center">V2Mac Secure Sandbox</h1>
 
@@ -6,7 +6,7 @@
 Every app opens as its own Mac app, and nothing it does reaches the internet except through the server you pick. Fail-closed, always.</p>
 
 <p align="center">
-  <a href="https://github.com/LordVersA/v2mac-sandbox/releases/latest"><img src="https://img.shields.io/github/v/release/LordVersA/v2mac-sandbox?label=release&color=0A84FF" alt="Latest release"></a>
+  <a href="https://github.com/v2macapp/v2mac-sandbox/releases/latest"><img src="https://img.shields.io/github/v/release/v2macapp/v2mac-sandbox?label=release&color=0A84FF" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/status-beta-FF9F0A" alt="Beta">
   <img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple" alt="macOS 26 or later">
   <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-555555" alt="Apple Silicon">
@@ -18,24 +18,24 @@ Every app opens as its own Mac app, and nothing it does reaches the internet exc
   <a href="#get-it">Get it</a> ·
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="https://github.com/LordVersA/v2mac/wiki/Sandbox"><b>Documentation</b></a> ·
+  <a href="https://github.com/v2macapp/v2mac/wiki/Sandbox"><b>Documentation</b></a> ·
   <a href="#build-from-source">Build</a>
 </p>
 
 Open a browser in a mini VM that leaves from Frankfurt, a terminal in another that leaves from Tokyo, and keep your Mac on your normal connection. Each mini VM is cut off from your Mac's files, your network and every other mini VM. If its server stops working, its apps go offline; they never fall back to your normal connection.
 
-The sandbox is part of [**V2Mac**](https://github.com/LordVersA/v2mac). This repo holds everything V2Mac downloads the first time you open it: the helper app, the VM agent, the kernel and the Debian image. Users who never open the sandbox download nothing.
+The sandbox is part of [**V2Mac**](https://github.com/v2macapp/v2mac). This repo holds everything V2Mac downloads the first time you open it: the helper app, the VM agent, the kernel and the Debian image. Users who never open the sandbox download nothing.
 
 ## Get it
 
-Install [V2Mac](https://github.com/LordVersA/v2mac#install), then click **Sandbox** in the sidebar or the menu bar panel and choose **Download**. V2Mac accepts only the exact sandbox release it was built with (checked by SHA-256), and offers an update when a new V2Mac needs a newer one. Your mini VMs and their data stay.
+Install [V2Mac](https://github.com/v2macapp/v2mac#install), then click **Sandbox** in the sidebar or the menu bar panel and choose **Download**. V2Mac accepts only the exact sandbox release it was built with (checked by SHA-256), and offers an update when a new V2Mac needs a newer one. Your mini VMs and their data stay.
 
 ## Features
 
 - **Mini VMs:** add as many as you like: empty, from a template, or cloned with their apps and data. Each has a colour, a name and an exit.
 - **One exit per mini VM:** any server from V2Mac (VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard…), changeable live, or no internet at all. A red **Not connected** and one notification when it stops; V2Mac never switches on its own.
 - **Real Mac apps:** every app in every mini VM becomes its own app in `~/Applications/V2Mac Sandbox` ("Chromium — Work"), with its own window, Dock icon and ⌘-Tab entry, its icon framed in the mini VM's colour. Terminal apps open in Terminal.
-- **Signed store:** install apps such as [Chromium](https://github.com/LordVersA/v2mac-chromium) from the [V2Mac store](https://github.com/LordVersA/v2mac-store). Every app is pinned to its source commit and hashes, reviewed, and checkable with **Verify Installation…**
+- **Signed store:** install apps such as [Chromium](https://github.com/v2macapp/v2mac-chromium) from the [V2Mac store](https://github.com/v2macapp/v2mac-store). Every app is pinned to its source commit and hashes, reviewed, and checkable with **Verify Installation…**
 - **Linux Packages (beta):** search Debian's archive and install any package; its apps appear like store apps.
 - **Permissions you control:** clipboard per direction, a Shared folder per mini VM, and sound, microphone and SSH keys asked at first use (**Allow**, **Don't Allow**, **Always Allow**).
 - **Nothing leaks by design:** the VM has no network device and never sees a server config or key. Apps match their exit's time zone. Files they save to your Mac are quarantined so macOS checks them.
@@ -65,9 +65,9 @@ Design and every decision: [docs/PLAN.md](docs/PLAN.md).
 
 | | |
 |---|---|
-| [Secure Sandbox guide](https://github.com/LordVersA/v2mac/wiki/Sandbox) | Getting it, mini VMs, apps, permissions, settings |
-| [Plugin template](https://github.com/LordVersA/v2mac-plugin-template) | Make your own sandbox app |
-| [Store](https://github.com/LordVersA/v2mac-store) | The signed index, submissions and review checklist |
+| [Secure Sandbox guide](https://github.com/v2macapp/v2mac/wiki/Sandbox) | Getting it, mini VMs, apps, permissions, settings |
+| [Plugin template](https://github.com/v2macapp/v2mac-plugin-template) | Make your own sandbox app |
+| [Store](https://github.com/v2macapp/v2mac-store) | The signed index, submissions and review checklist |
 
 ## Build from source
 
@@ -79,4 +79,4 @@ Scripts/build-helper.sh                                                         
 Scripts/package.sh <download-url>                                               # zip + pin.json
 ```
 
-Tests: `swift test`. A tag `vX.Y.Z` builds and publishes a release ([release.yml](.github/workflows/release.yml)); the V2Mac release that follows pins its `pin.json`. Bug reports go to [V2Mac's Issues](https://github.com/LordVersA/v2mac/issues).
+Tests: `swift test`. A tag `vX.Y.Z` builds and publishes a release ([release.yml](.github/workflows/release.yml)); the V2Mac release that follows pins its `pin.json`. Bug reports go to [V2Mac's Issues](https://github.com/v2macapp/v2mac/issues).

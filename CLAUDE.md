@@ -14,7 +14,7 @@ Plan and every decision: `docs/PLAN.md` (read the section before changing what i
 - Kernel: own minimal config from the kernel.org LTS; rootfs: Debian 13 arm64 via `mmdebstrap`
   with `SOURCE_DATE_EPOCH`, packages only from Debian's signed archive.
 - Testing follows `../app/CLAUDE.md`: dev build only, never touch the installed V2Mac or its core.
-- On GitHub as `LordVersA/v2mac-sandbox` (private). Push when the user asks or CI needs to see it.
+- On GitHub as `v2macapp/v2mac-sandbox` (private). Push when the user asks or CI needs to see it.
 - `app.lock`: the app commit or tag CI checks out beside this repo. Bump it with every link change.
 - Build: `Scripts/build-agent.sh`, `build-kernel.sh`, `build-rootfs.sh` (Docker, arm64; `PROXY=` for a
   download proxy), then `build-helper.sh` and `package.sh <url of files.json>` (per-file zips, patches from

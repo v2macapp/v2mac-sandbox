@@ -9,7 +9,7 @@ jobs:
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        with: { repository: LordVersA/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
+        with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: swift test
         working-directory: sandbox
   agent:
@@ -20,5 +20,5 @@ jobs:
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        with: { repository: LordVersA/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
+        with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: sandbox/Scripts/build-agent.sh

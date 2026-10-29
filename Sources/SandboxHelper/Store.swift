@@ -29,7 +29,7 @@ struct StoreIndex: Decodable, Equatable {
 }
 
 enum Store {
-    static let indexURL = URL(string: "https://raw.githubusercontent.com/LordVersA/v2mac-store/main/index.json")!
+    static let indexURL = URL(string: "https://raw.githubusercontent.com/v2macapp/v2mac-store/main/index.json")!
     /// The store key in the maintainer's Keychain (`../store/Scripts/sign.swift`), as in `../store/key.pub`.
     static let publicKey = "EfRyuiaKGlGqjDfqs0Vy1zaoMoDC+Aw4RHz+eEYXU6k="
 
