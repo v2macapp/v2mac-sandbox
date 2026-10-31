@@ -380,6 +380,7 @@ import V2MacCore
         let result = await enqueueResult { await self.run(["pkg-install", String(mini.index), mini.id, name], timeoutMS: 1_800_000) }.value
         guard result.ok else {
             if result.output.hasPrefix("busy") { throw PluginManifest.Invalid("Close the Debian apps and Terminals of every mini VM, then install again: they run on the packages being changed.") }
+            log("pkg-install \(name) failed: \(result.output.suffix(2000))")
             throw PluginManifest.Invalid("\(name) could not be installed:\n\(result.output.suffix(600))")
         }
         guard let current = vms.first(where: { $0.id == mini.id }) else { return [] }

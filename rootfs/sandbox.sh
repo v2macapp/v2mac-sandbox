@@ -331,7 +331,8 @@ pkg-install) # pkg-install <n> <id> <package>: installs a Debian package and wha
           END { if (y == "Application" && h != "true" && n != "" && e != "") printf "@@app\t%s\t%s\t%s\t%s\n", t == "true" ? "pty" : "gui", f, n, e }'\'' "$f"
       done' "$4" "$APT" >$R/pkgs.log 2>&1 || status=$?
   umount $a
-  [ $status = 0 ] || { tail -n 8 $R/pkgs.log; exit 1; }
+  # dpkg's first error and what led to it: its last lines only list the packages that depend on the broken one.
+  [ $status = 0 ] || { grep -B4 -m1 '^dpkg: error' $R/pkgs.log || tail -n 8 $R/pkgs.log; exit 1; }
   sed -n 's/^@@//p' $R/pkgs.log
   ;;
 probe) # probe <n> <id> <other n> <other id>: leak probes from mini VM n (plan §9)
