@@ -197,7 +197,9 @@ extension InstalledApp {
 /// `v2mac-pty` in the user's Terminal.
 enum StubApps {
     static var folder: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/V2Mac Sandbox", isDirectory: true)
+        // A dev build's apps must not replace the installed sandbox's, which have the same names.
+        let dev = Bundle.main.bundlePath.contains("/v2mac-dev/")
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(dev ? "Applications/V2Mac Sandbox Dev" : "Applications/V2Mac Sandbox", isDirectory: true)
     }
 
     static func url(_ app: InstalledApp, in vm: MiniVM) -> URL {

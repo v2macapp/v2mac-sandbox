@@ -1,7 +1,8 @@
 #!/bin/sh
 # Publishes out/V2Mac Sandbox.app file by file (docs/delta-updates.md): out/release/ gets one zip per
 # file, the bsdiff patches from out/patches/ (release CI's patch job) and files.json, the manifest;
-# out/pin.json is the `SandboxPin` a V2Mac release (or a dev build's -debugSandboxPin) accepts.
+# out/pin.json is the `SandboxPin` V2Mac reads (release CI signs it; a dev build takes it unsigned with
+# -debugSandboxPin), with `link`, the SandboxLink.version this build speaks: the only thing app and sandbox share.
 # Usage: package.sh <URL of files.json>; the manifest names its files relative to it.
 set -e
 cd "$(dirname "$0")/.."
@@ -11,7 +12,7 @@ APP="out/V2Mac Sandbox.app"
 [ -z "$(find "$APP" ! -type f ! -type d)$(find "$APP" -type d -empty)" ] || { echo "$APP has links or empty folders"; exit 1; }
 rm -rf out/release && mkdir -p out/release
 python3 - "$APP" "$1" <<'PY'
-import hashlib, json, os, subprocess, sys
+import hashlib, json, os, re, subprocess, sys
 app, url = sys.argv[1], sys.argv[2]
 sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
 def source(path, name):
@@ -42,7 +43,8 @@ version = subprocess.run(["plutil", "-extract", "CFBundleShortVersionString", "r
 json.dump({"version": version, "files": files}, open("out/release/files.json", "w"), indent=1)
 helper = next(f for f in files if f["path"] == "Contents/MacOS/V2Mac Sandbox")
 pin = {"url": url, "sha256": sha("out/release/files.json"), "executableSHA256": helper["sha256"],
-       "size": sum(f["zip"]["size"] for f in files), "version": version}
+       "size": sum(f["zip"]["size"] for f in files), "version": version,
+       "link": int(re.search(r"static let version = (\d+)", open("../app/Packages/V2MacCore/Sources/V2MacCore/Sandbox/SandboxLink.swift").read())[1])}
 json.dump(pin, open("out/pin.json", "w"))
 print(json.dumps(pin))
 PY

@@ -16,7 +16,7 @@ SSH, RDP… are **separate plugin repos** built later; two tiny sample plugins p
 | Topic | Decision |
 |---|---|
 | Packaging | A **helper process** ("V2Mac Sandbox", an ad-hoc signed app bundle) downloaded into `<data>/sandbox/`. Not a loadable bundle: V2Mac has Hardened Runtime, and loading a separately downloaded bundle into an ad-hoc app would need `disable-library-validation`. |
-| Versions | **Locked**: each V2Mac release pins one sandbox version by SHA-256. The pin is the trust; the sandbox download needs no key of its own. |
+| Versions | **Independent** (changed 2026-11-01, was locked by a pin in each V2Mac release): each release publishes `pin.json`, signed with V2Mac's update key, and V2Mac checks `releases/latest` hourly. `SandboxLink.version` is the one shared number: V2Mac only runs a sandbox with its own, and otherwise says which side must update. An installed sandbox never steps back to an older version. Bump the number for a link change neither side can absorb, and release that sandbox first: older V2Macs keep what they have installed and are told to update. |
 | V2Mac ↔ helper | V2Mac checks the helper's hash, launches it and hands it one end of a **socketpair**. No listening socket exists, so no other process can ask for server configs. |
 | Sandbox core | The **helper** runs its own xray (V2Mac's bundled binary) through `CoreRunner`. V2Mac gives it ready outbounds over the link. Secrets stay on the host, never in the VM. |
 | Quit | Quitting V2Mac with sandbox apps open asks: quit them too, or cancel. The helper never outlives V2Mac. |
@@ -65,8 +65,8 @@ every server it hands out), `NotificationService` (helper events are posted by V
 Notifications keeps one switch per kind).
 
 ## 2. V2Mac ↔ helper link
-- V2Mac downloads `V2Mac Sandbox.app.zip`, checks the pinned SHA-256, unpacks into `<data>/sandbox/`,
-  re-checks the executable's hash before each launch, starts it with one socketpair end as fd 3.
+- V2Mac downloads the release its signed `pin.json` names, checks it, unpacks into `<data>/sandbox/`, keeps that
+  signed `pin.json` there, re-checks its signature and the executable's hash before each launch, starts it with one socketpair end as fd 3.
 - Messages (length-prefixed JSON, size-limited, fuzz-tested): `servers` / `serversChanged`,
   `outbound(id)` → JSON, `active`, `download(url, sha256)` → file path, `notice(kind, text)`,
   `openWindow`, `quitRequest` → apps open? → answer.
@@ -187,7 +187,7 @@ Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change mea
 | Compromised VM → host | abuse bridges | helper parses only RFB, pty and fixed agent messages, length-limited, fuzz-tested |
 | Other Mac processes | get server configs | socketpair only, no listening socket; helper hash checked before launch |
 | Other Mac processes | hijack per-VM inbounds | 127.0.0.1 + per-VM VLESS UUIDs |
-| Swapped helper or image | run attacker code | SHA-256 pinned in each V2Mac release |
+| Swapped helper or image | run attacker code | SHA-256 in the release's `pin.json`, signed with V2Mac's update key; no step back to an older version |
 | Swapped plugin / frozen index | supply chain | signed index (Keychain key on the maintainer's Mac), version + 90-day expiry, revoked list, per-layer SHA-256, pinned commits, enforced base |
 | Network change, sleep, main VPN toggle | direct leak | no direct path exists; sandbox core binds the NIC like the main core |
 | Later: L3 VPN adapters (§10) | VPN credentials in the VM | stated in UI; only for those adapters |

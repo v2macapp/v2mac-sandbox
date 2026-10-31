@@ -8,8 +8,9 @@ Plan and every decision: `docs/PLAN.md` (read the section before changing what i
   Anything else belongs here.
 - SwiftPM; `V2MacCore` comes by path from `../app/Packages/V2MacCore`. CI checks the app out at the
   pinned tag beside this repo. Link message types live in the app package; change both together.
-- Releases are locked to V2Mac releases: a V2Mac release pins one sandbox release by SHA-256. Tag the
-  sandbox first, then the app pins it.
+- Releases are independent of V2Mac's: every V2Mac takes the newest sandbox whose signed `pin.json` has its
+  `SandboxLink.version`. Bump that version only for a link change neither side can absorb, and release the
+  sandbox first (`docs/PLAN.md`, "Versions"). The sandbox repo needs the app's `UPDATE_SIGNING_KEY` secret.
 - The VM has no network device and never sees server configs or keys.
 - Kernel: own minimal config from the kernel.org LTS; rootfs: Debian 13 arm64 via `mmdebstrap`
   with `SOURCE_DATE_EPOCH`, packages only from Debian's signed archive.

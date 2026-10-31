@@ -1,7 +1,8 @@
 # Push a tag vX.Y.Z: builds agent, kernel and rootfs on arm64 Linux, the base plugins build on (that
 # rootfs as an image, pushed to GHCR; its digest becomes the helper's bases.json), then the helper on
 # macOS, and publishes the bundle file by file with its manifest files.json, bsdiff patches of the rootfs
-# from the last 3 releases (docs/delta-updates.md) and pin.json. The V2Mac release that follows pins that pin.json.
+# from the last 3 releases (docs/delta-updates.md) and the signed pin.json, which every V2Mac with the same link version
+# picks up from releases/latest.
 name: Release
 on:
   push: { tags: ["v*"] }
@@ -77,7 +78,11 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
+          # V2Mac trusts a sandbox release by this signature: without it, no copy would take the release.
+          [ -n "$UPDATE_SIGNING_KEY" ] || { echo "::error::The UPDATE_SIGNING_KEY secret is not set"; exit 1; }
           VERSION=${VERSION#v} Scripts/build-helper.sh
           Scripts/package.sh "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/files.json"
-          gh release create "${{ github.ref_name }}" out/release/* out/pin.json out/images/bases.json --title "${{ github.ref_name }}" --notes "Pin: \`$(cat out/pin.json)\`"
+          ../app/Scripts/sign-update.swift out/pin.json
+          gh release create "${{ github.ref_name }}" out/release/* out/pin.json out/pin.json.sig out/images/bases.json --title "${{ github.ref_name }}" --notes "Pin: \`$(cat out/pin.json)\`"
