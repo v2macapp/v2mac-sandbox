@@ -44,6 +44,20 @@ import V2MacCore
     @Test func quotesForTheLaunchCommand() {
         #expect(StubApps.quote("it's a/b") == #"'it'\''s a/b'"#)
     }
+
+    @Test func appsFromAnOlderStubAreOutOfDate() throws {
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        #expect(!StubApps.isCurrent(bundle, stub: "new")) // no app yet
+        try FileManager.default.createDirectory(at: bundle.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        func plist(_ p: [String: Any]) throws { try PropertyListSerialization.data(fromPropertyList: p, format: .xml, options: 0).write(to: bundle.appendingPathComponent("Contents/Info.plist")) }
+        try plist(["CFBundleName": "From before stubs were recorded"])
+        #expect(!StubApps.isCurrent(bundle, stub: "new"))
+        try plist(["V2MacStub": "old"])
+        #expect(!StubApps.isCurrent(bundle, stub: "new"))
+        try plist(["V2MacStub": "new"])
+        #expect(StubApps.isCurrent(bundle, stub: "new"))
+    }
 }
 
 @Suite struct PackageAppTests {

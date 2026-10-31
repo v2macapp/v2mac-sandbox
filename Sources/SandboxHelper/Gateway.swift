@@ -45,6 +45,17 @@ import V2MacCore
         self.vm = vm
         self.root = root
         vms = (try? JSONDecoder().decode([MiniVM].self, from: Data(contentsOf: root.appendingPathComponent("vms.json")))) ?? []
+        refreshStubs()
+    }
+
+    /// A helper update brings a new stub, but generated apps keep the copy made when they were installed.
+    private func refreshStubs() {
+        guard let stub = StubApps.currentStub else { return }
+        for mini in vms {
+            for app in mini.apps where !StubApps.isCurrent(StubApps.url(app, in: mini), stub: stub) {
+                do { try StubApps.make(app, in: mini, socket: ptySocket) } catch { log("refresh \(app.id): \(error)") }
+            }
+        }
     }
 
     private func save() {

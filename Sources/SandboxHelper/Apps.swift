@@ -1,6 +1,7 @@
 import AgentProtocol
 import AppKit
 import ImageIO
+import V2MacCore
 
 /// `plugin.json` (plan §6, plugin API v1). A plugin is untrusted input: everything the runtime uses
 /// from it is checked here.
@@ -204,6 +205,17 @@ enum StubApps {
         return folder.appendingPathComponent("\(safe(app.name)) — \(safe(vm.name)).app", isDirectory: true)
     }
 
+    /// The helper's stub, which a generated app records so a helper update can tell it is out of date.
+    static var currentStub: String? {
+        try? SandboxFiles.sha256(of: Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/v2mac-stub"))
+    }
+
+    static func isCurrent(_ bundle: URL, stub: String) -> Bool {
+        guard let data = try? Data(contentsOf: bundle.appendingPathComponent("Contents/Info.plist")),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return false }
+        return plist["V2MacStub"] as? String == stub
+    }
+
     static func bundleID(_ app: InstalledApp, in vm: MiniVM) -> String { "io.github.lordversa.v2mac.sandbox.\(vm.id).\(app.id)" }
 
     static func make(_ app: InstalledApp, in vm: MiniVM, socket: URL) throws {
@@ -223,6 +235,7 @@ enum StubApps {
             "CFBundleIconFile": "AppIcon", "NSHighResolutionCapable": true,
             // Read by the stub: where the helper listens and which app of which mini VM this is.
             "V2MacSocket": socket.path, "V2MacVM": vm.id, "V2MacApp": app.id, "V2MacDisplay": app.display,
+            "V2MacStub": currentStub ?? "",
         ]
         try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
             .write(to: bundle.appendingPathComponent("Contents/Info.plist"))

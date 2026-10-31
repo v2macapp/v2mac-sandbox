@@ -24,6 +24,8 @@ public final class RFBClient: @unchecked Sendable {
 
     private let read: @Sendable (UnsafeMutableRawBufferPointer) -> Int
     private let write: @Sendable ([UInt8]) -> Void
+    private let lock = NSLock()
+    private var handshakeDone = false
 
     /// `read` fills as much of the buffer as it can and returns the count, 0 or less at the end.
     public init(read: @escaping @Sendable (UnsafeMutableRawBufferPointer) -> Int, write: @escaping @Sendable ([UInt8]) -> Void) {
@@ -76,6 +78,13 @@ public final class RFBClient: @unchecked Sendable {
         let encodings = [1, 0, -223] // CopyRect, Raw, DesktopSize
         write([2, 0] + Self.be16(encodings.count) + encodings.flatMap { Self.be32(Int(UInt32(bitPattern: Int32($0)))) })
         requestUpdate(incremental: false)
+        lock.withLock { handshakeDone = true }
+    }
+
+    /// The window takes input before the handshake ends (it opens first), and wayvnc would read a mouse
+    /// move there as the protocol version and refuse the session: nothing is on screen yet, so drop it.
+    private func input(_ bytes: [UInt8]) {
+        if lock.withLock({ handshakeDone }) { write(bytes) }
     }
 
     public func requestUpdate(incremental: Bool) {
@@ -150,7 +159,7 @@ public final class RFBClient: @unchecked Sendable {
 
     // MARK: Input
 
-    public func key(_ sym: UInt32, down: Bool) { write([4, down ? 1 : 0, 0, 0] + Self.be32(Int(sym))) }
+    public func key(_ sym: UInt32, down: Bool) { input([4, down ? 1 : 0, 0, 0] + Self.be32(Int(sym))) }
 
     /// Presses `sym` with `mods` held, then releases everything.
     public func tap(_ sym: UInt32, mods: [UInt32] = []) {
@@ -161,23 +170,23 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     public func pointer(buttons: UInt8, x: Int, y: Int) {
-        write([5, buttons] + Self.be16(min(max(0, x), max(0, width - 1))) + Self.be16(min(max(0, y), max(0, height - 1))))
+        input([5, buttons] + Self.be16(min(max(0, x), max(0, width - 1))) + Self.be16(min(max(0, y), max(0, height - 1))))
     }
 
     /// Mac clipboard text for the app (ClientCutText); sent only on ⌘V.
     public func cutText(_ text: String) {
         let bytes = Array(text.utf8.prefix(Self.maxCutText))
-        write([6, 0, 0, 0] + Self.be32(bytes.count) + bytes)
+        input([6, 0, 0, 0] + Self.be32(bytes.count) + bytes)
     }
 
     /// Our 250: text RFB keysyms can't carry (Persian, IMEs); the agent types it.
     public func text(_ text: String) {
         let bytes = Array(text.utf8.prefix(Self.maxCutText))
-        write([250] + Self.be32(bytes.count) + bytes)
+        input([250] + Self.be32(bytes.count) + bytes)
     }
 
     /// Our 252: a new output size in pixels.
     public func requestSize(width: Int, height: Int, scale: Int) {
-        write([252] + Self.be16(width) + Self.be16(height) + [UInt8(scale)])
+        input([252] + Self.be16(width) + Self.be16(height) + [UInt8(scale)])
     }
 }

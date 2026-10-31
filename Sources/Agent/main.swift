@@ -22,6 +22,18 @@ func listenVsock(_ port: UInt32) -> Int32 {
     return s
 }
 
+/// `writeAll` for a session's sockets: a peer that just closed ends that session, not this process
+/// (a process-wide SIG_IGN would be inherited by the script and the apps).
+func sendAll(_ fd: Int32, _ bytes: [UInt8]) -> Bool {
+    var off = 0
+    while off < bytes.count {
+        let w = bytes[off...].withUnsafeBytes { send(fd, $0.baseAddress, $0.count, Int32(MSG_NOSIGNAL)) }
+        if w <= 0 { return false }
+        off += w
+    }
+    return true
+}
+
 @discardableResult func writeAll(_ fd: Int32, _ bytes: [UInt8]) -> Bool {
     var off = 0
     while off < bytes.count {
@@ -143,7 +155,7 @@ func servePty(_ c: Int32) -> Never {
         }
         if fds[1].revents != 0 {
             let n = read(master, &buf, buf.count)
-            guard n > 0, writeAll(c, Array(buf[0..<n])) else { break relay }
+            guard n > 0, sendAll(c, Array(buf[0..<n])) else { break relay }
         }
     }
     close(c)
@@ -214,13 +226,14 @@ func serveGui(_ c: Int32) -> Never {
         var filter = RFBClientFilter(clipboard: words[5] == "1")
         var fds = [pollfd(fd: c, events: Int16(POLLIN), revents: 0), pollfd(fd: vnc, events: Int16(POLLIN), revents: 0)]
         var buf = [UInt8](repeating: 0, count: 65536)
+        var closedBy = "app"
         relay: while poll(&fds, 2, -1) > 0 {
             if fds[0].revents != 0 {
                 let n = read(c, &buf, buf.count)
-                guard n > 0, let outs = try? filter.feed(buf[0..<n]) else { break relay }
+                guard n > 0, let outs = try? filter.feed(buf[0..<n]) else { closedBy = "Mac"; break relay }
                 for out in outs {
                     switch out {
-                    case .forward(let bytes): guard writeAll(vnc, bytes) else { break relay }
+                    case .forward(let bytes): guard sendAll(vnc, bytes) else { break relay }
                     case .text(let text): script(["gui-type", token], input: Array(text.utf8))
                     case .resize(let width, let height, let scale):
                         script(["gui-size", token, String(width), String(height), String(scale)])
@@ -229,10 +242,11 @@ func serveGui(_ c: Int32) -> Never {
             }
             if fds[1].revents != 0 {
                 let n = read(vnc, &buf, buf.count)
-                guard n > 0, writeAll(c, Array(buf[0..<n])) else { break relay }
+                guard n > 0 else { break relay }
+                guard sendAll(c, Array(buf[0..<n])) else { closedBy = "Mac"; break relay }
             }
         }
-        print("agent: gui \(token) ended after \(time(nil) - started) s, closed by the \(fds[0].revents != 0 ? "Mac" : "app") side")
+        print("agent: gui \(token) ended after \(time(nil) - started) s, closed by the \(closedBy) side")
         close(vnc)
     }
     close(c)

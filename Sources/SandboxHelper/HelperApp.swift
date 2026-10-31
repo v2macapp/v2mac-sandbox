@@ -28,6 +28,8 @@ import V2MacCore
 
     public static func main() {
         setvbuf(stdout, nil, _IOLBF, 0)
+        // A window closing while a frame is on its way must end that session, not the helper and its VM.
+        signal(SIGPIPE, SIG_IGN)
         guard AppLink.isPresent else {
             log("start V2Mac Sandbox from V2Mac")
             exit(2)

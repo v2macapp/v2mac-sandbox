@@ -27,6 +27,24 @@ import Testing
         be16(x) + be16(y) + be16(w) + be16(h) + withUnsafeBytes(of: enc.bigEndian) { Array($0) }
     }
 
+    /// The window opens before the handshake ends: a mouse move there must not reach wayvnc, which
+    /// would read it as the protocol version and refuse the session.
+    @Test func inputWaitsForTheHandshake() throws {
+        let pipe = Pipe(Self.greeting(2, 2))
+        let client = pipe.client()
+        client.pointer(buttons: 0, x: 1, y: 1)
+        client.key(0x61, down: true)
+        client.text("a")
+        client.cutText("a")
+        client.requestSize(width: 2, height: 2, scale: 1)
+        #expect(pipe.output.isEmpty)
+        try client.handshake()
+        #expect(Array(pipe.output.prefix(12)) == Array("RFB 003.008\n".utf8))
+        let sent = pipe.output.count
+        client.pointer(buttons: 0, x: 1, y: 1)
+        #expect(Array(pipe.output[sent...]) == [5, 0, 0, 1, 0, 1])
+    }
+
     @Test func drawsRawAndCopyRectAndResizes() throws {
         let raw = Self.rect(1, 1, 1, 1, 0) + [9, 8, 7, 0]
         let copy = Self.rect(0, 0, 1, 1, 1) + Self.be16(1) + Self.be16(1)
