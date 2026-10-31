@@ -18,6 +18,7 @@ Every app opens as its own Mac app, and nothing it does reaches the internet exc
   <a href="#get-it">Get it</a> ·
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
+  <a href="https://v2macapp.github.io/sandbox/"><b>Website</b></a> ·
   <a href="https://github.com/v2macapp/v2mac/wiki/Sandbox"><b>Documentation</b></a> ·
   <a href="#build-from-source">Build</a>
 </p>
