@@ -19,7 +19,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          repo=ghcr.io/lordversa/v2mac-base
+          repo=ghcr.io/v2macapp/v2mac-base
           ref=$repo:${{ github.ref_name }}
           docker tag v2mac/base "$ref" && docker push "$ref"
           # The image also has local RepoDigests; select the one just pushed to GHCR.
