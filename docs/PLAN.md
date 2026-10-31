@@ -210,7 +210,7 @@ Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change mea
 ## 10. Later (not v1)
 - **Plugin repos**: Firefox (privacy profile from exit facts: TZ, geolocation in exit city,
   `media.peerconnection.ice.no_host`, fingerprinting protection without forced UTC, telemetry off),
-  Chromium, Terminal, SSH, RDP; templates like "Private browsing".
+  Chromium, SSH, File Viewer, Telegram, RDP; templates like "Private browsing". Plan: `first-plugins.md`.
 - **Other VPNs as Xray outbounds**: WireGuard needs nothing (Xray's `wireguard` outbound). OpenVPN /
   OpenConnect / IPsec in their own netns in the VM with a tiny SOCKS server, used by the host as a
   `socks` outbound over vsock; then V2Mac's TUN mode, system proxy and kill switch can use them too.
