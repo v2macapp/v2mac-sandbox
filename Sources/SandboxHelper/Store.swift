@@ -61,7 +61,7 @@ enum Store {
         return decoded
     }
 
-    /// The base released with this sandbox: its own root (`Scripts/build-base.sh`, bundled as bases.json).
+    /// Every released base, this sandbox's own root among them (`Scripts/merge-bases.py`, bundled as bases.json).
     static let bases: Set<String> = {
         guard let url = Bundle.main.url(forResource: "bases", withExtension: "json"), let data = try? Data(contentsOf: url),
               let list = try? JSONDecoder().decode([String: [String]].self, from: data) else { return [] }

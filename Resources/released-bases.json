@@ -1,0 +1,9 @@
+{
+  "_comment": "Base images of releases before v1.1.5, whose bases.json held only their own. Release CI adds each new one on top of the last release's list.",
+  "allowed": [
+    "ghcr.io/lordversa/v2mac-base@sha256:3d73538e1d418c438e2cbc2890d5f024b72887072811a1f48ceac1deb0388161",
+    "ghcr.io/lordversa/v2mac-base@sha256:ab602f0326f922773cb3436907b2dfb4abc6c3a4911320572c64afbcd683dd6f",
+    "ghcr.io/v2macapp/v2mac-base@sha256:9f2ba9fd3354beca8be9e07c608b065d5ab152bb29dd1cb69302c8607f2ad92f",
+    "ghcr.io/v2macapp/v2mac-base@sha256:eb34f1c87a02c88c23e11cff4c5ba585439190151a9cb2b24d91343a75de0f9d"
+  ]
+}

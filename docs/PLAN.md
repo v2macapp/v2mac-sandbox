@@ -171,7 +171,10 @@ Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change mea
   re-hash on demand. "Verified" means "unchanged since published", not "safe".
 - **Base**: the VM's own root (Debian 13 with sway, wayvnc, PipeWire, GTK, fonts, mesa llvmpipe), made an
   image by `Scripts/build-base.sh` and pushed to GHCR by each sandbox release. Every sandbox already has
-  it, so users download only what a plugin adds (Hello Window: 311 bytes instead of ~1 GB).
+  it, so users download only what a plugin adds (Hello Window: 311 bytes instead of ~1 GB). `bases.json` lists
+  every released base (decided 2026-11-01), so a release doesn't hide apps built on an earlier one: their layers
+  run over a newer root of the same Debian. Remove a digest from `Resources/released-bases.json` and the releases'
+  lists only if a base really breaks older apps.
 - **SDK** = `plugin-template` (0BSD): Containerfile, `plugin.json`, icon, CI workflow, docs page,
   samples `hello-gui` (input, resize, clipboard, exit facts) and `hello-pty`.
 
