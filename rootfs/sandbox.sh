@@ -375,6 +375,8 @@ pkg-install) # pkg-install <n> <id> <package>: installs a Debian package and wha
       done' "$4" "$APT" || status=$?
   # dpkg's first error and what led to it: its last lines only list the packages that depend on the broken one.
   [ $status = 0 ] || { grep -B4 -m1 '^dpkg: error' $R/pkgs.log || tail -n 8 $R/pkgs.log; exit 1; }
+  # Just installed from fresh lists: an upgrade now would find nothing and block the next install.
+  touch $P/upgrade-checked
   sed -n 's/^@@//p' $R/pkgs.log
   ;;
 pkg-link) # pkg-link <sha256>: a store recipe's files now sit on the Debian packages (approot)

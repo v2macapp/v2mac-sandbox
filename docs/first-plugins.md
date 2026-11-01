@@ -13,9 +13,9 @@ major version. "Verified" for a recipe means "V2Mac reviewed the settings and te
 |---|---|---|---|
 | 0 | Security sources, recipes, automatic updates | `sandbox`, `store`, `plugin-template` | none |
 | 1 | Firefox ESR 0.1.0, Chromium 0.3.0 as recipes | `v2mac-firefox`, `v2mac-chromium` | 0 |
-| 2 | SSH (stays a plain plugin) | `v2mac-ssh` | base from 0 |
+| 2 | SSH as a recipe, so `openssh-client` gets updates | `v2mac-ssh` | base from 0 |
 | 3 | File Viewer + template, as a recipe | `v2mac-file-viewer` | 0 |
-| 4 | Telegram, as a recipe | `v2mac-telegram` | 0 and spike T0 |
+| 4 | Telegram: held, spike T0 not passed (no Qt Wayland plugin found yet) | `v2mac-telegram` | 0 and spike T0 |
 
 ## 0. Security updates in the base (do this first)
 
