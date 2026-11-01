@@ -19,12 +19,24 @@ import V2MacCore
 
     @Test func refusesWhatTheRuntimeCannotTrust() throws {
         let bad = [
-            (#""api":1"#, #""api":2"#), (#""id":"hello-pty""#, #""id":"a;b""#), (#""id":"hello-pty""#, #""id":"../x""#),
+            (#""api":1"#, #""api":3"#), (#""id":"hello-pty""#, #""id":"a;b""#), (#""id":"hello-pty""#, #""id":"../x""#),
             (#""display":"pty""#, #""display":"web""#), (#"["bash","-l"]"#, "[]"), (#""GREETING""#, #""A B""#),
             (#""hi there""#, #""a\nb""#), (#"["ssh-agent"]"#, #"["camera"]"#),
         ]
         for (from, to) in bad {
             #expect(throws: PluginManifest.Invalid.self) { try decode(Self.good.replacingOccurrences(of: from, with: to)).validate() }
+        }
+    }
+
+    @Test func aRecipeNamesValidDebianPackagesFromAPI2() throws {
+        let recipe = #""api":2,"packages":["firefox-esr","libreoffice-writer"],"id":"hello-pty""#
+        let manifest = try decode(Self.good.replacingOccurrences(of: #""api":1,"id":"hello-pty""#, with: recipe))
+        try manifest.validate()
+        #expect(InstalledApp(manifest, granted: []).packages == ["firefox-esr", "libreoffice-writer"])
+        for bad in [#""api":1,"packages":["a"],"id":"hello-pty""#, #""api":2,"packages":["-o"],"id":"hello-pty""#,
+                    #""api":2,"packages":["A"],"id":"hello-pty""#, #""api":2,"packages":["a b"],"id":"hello-pty""#,
+                    #""api":2,"packages":[".."],"id":"hello-pty""#] {
+            #expect(throws: PluginManifest.Invalid.self) { try decode(Self.good.replacingOccurrences(of: #""api":1,"id":"hello-pty""#, with: bad)).validate() }
         }
     }
 

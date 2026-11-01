@@ -19,7 +19,9 @@ approot() {
   [ -d "/data/apps/$1/root" ] || { echo "app $1 is not installed" >&2; exit 2; }
   if ! mountpoint -q "$m"; then
     mkdir -p "$m" "$R/au-$1" "$R/aw-$1"
-    mount -t overlay overlay -o "lowerdir=$R/fix:/data/apps/$1/root:/,upperdir=$R/au-$1,workdir=$R/aw-$1" "$m"
+    # A recipe's own files (pkg-link) sit on the Debian packages it names.
+    lower=/data/apps/$1/root; if [ -f "/data/apps/$1/packages" ]; then lower=$lower:$P/root; fi
+    mount -t overlay overlay -o "lowerdir=$R/fix:$lower:/,upperdir=$R/au-$1,workdir=$R/aw-$1" "$m"
     # The app's files could make these symlinks; a root mount would follow them out of $m.
     for d in tmp var/tmp; do
       [ "$(realpath -e "$m/$d" 2>/dev/null)" = "$m/$d" ] || { umount -l "$m"; echo "app $1 replaces /$d" >&2; exit 2; }
@@ -37,7 +39,7 @@ rootof() {
     -) if [ -d $P/root ]; then echo "--label v2mac.pkgs=1 --rootfs $(approot pkgs)"; else echo "--rootfs $CTR"; fi;;
     pkgs) echo "--label v2mac.pkgs=1 --rootfs $(approot pkgs)";;
     *[!0-9a-f]*|'') echo "bad image $1" >&2; exit 2;;
-    *) echo "--rootfs $(approot "$1")";;
+    *) label=""; if [ -f "/data/apps/$1/packages" ]; then label="--label v2mac.pkgs=1 "; fi; echo "$label--rootfs $(approot "$1")";;
   esac
 }
 # Debian's archive for pkg-search and pkg-install: through mini VM <n>'s exit, as root in the container
@@ -53,6 +55,60 @@ pkglists() {
   # shellcheck disable=SC2086
   asapp podman run --rm --timeout 600 $HARDENED $(aptnet "$1" "$2") --rootfs $CTR apt-get $APT -q update --error-on=any >$R/pkgs.log 2>&1 \
     || { grep -E "^(W|E):" $R/pkgs.log | head -n 5; tail -n 3 $R/pkgs.log; exit 1; }
+}
+# Unmounts every app's view of the packages; each is remounted on next use. Only with nothing running on them.
+pkgs_unmount() {
+  for f in $P/root /data/apps/*/packages; do
+    d=${f%/*}; m=$R/app-${d##*/}
+    if mountpoint -q "$m"; then umount "$m/tmp" "$m/var/tmp" "$m"; fi
+  done
+}
+# Swaps in the package root a finished upgrade staged. A crash between the moves is finished at boot.
+pkgs_promote() {
+  pkgs_unmount
+  rm -rf $P/root.old
+  if [ -d $P/root ]; then mv $P/root $P/root.old; fi
+  mv $P/root.ready $P/root
+  mv -f $P/root.ready.base $P/base.sha
+  rm -rf $P/root.old
+}
+# aptroot <upper> <work> <n> <id> <script> [its $0 and args]: runs the script as root over the VM's root with
+# <upper> as the writable layer, on mini VM n's network; output in $R/pkgs.log.
+aptroot() {
+  up=$1; wk=$2; n=$3; id=$4; shift 4
+  # dpkg must own the base's files (root's), which the rootless `app` can't. So root's podman runs it, but
+  # in a user namespace of its own (300000 on, in the `containers` range): its root is nobody in the VM.
+  # overlayfs can't be idmapped, so its lower layers are: the VM's erofs root (/ itself is an overlay)
+  # and the fixes, where root's files show as 300000's. The upper layer is plain, with 300000's files.
+  install -d -m700 "$wk" $P/podman
+  # inner:outer, as in uid_map: the disk's 0 shows as 300000
+  map=X-mount.idmap=0:300000:65536
+  mkdir -p $R/pkgs-base $R/pkgs-fix
+  mountpoint -q $R/pkgs-base || mount -t erofs -o "ro,$map" /dev/vda $R/pkgs-base
+  mountpoint -q $R/pkgs-fix || mount --bind -o "$map" $R/fix $R/pkgs-fix
+  a=$R/pkgs-apt; mkdir -p $a; if mountpoint -q $a; then umount -l $a; fi
+  mount -t overlay overlay -o "lowerdir=$R/pkgs-fix:$R/pkgs-base,upperdir=$up,workdir=$wk" $a
+  # Not $HARDENED: dpkg needs the namespaced capabilities and a writable root. Its scripts run only here,
+  # on the mini VM's network; the lists stay read-only.
+  pid=$(asapp podman inspect -f '{{.State.Pid}}' "vm-$id")
+  status=0
+  # shellcheck disable=SC2086
+  # Its own storage on the data disk, root's: overlayfs can't hold podman's storage on the VM's overlay root.
+  podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
+    --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro \
+    -e DEBIAN_FRONTEND=noninteractive --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /var/tmp:rw,exec,mode=1777 \
+    --rootfs "$a" sh -c "$@" >$R/pkgs.log 2>&1 || status=$?
+  umount $a
+  return $status
+}
+# The packages a status file marks installed, one per line, sorted.
+installed() { awk '/^Package:/ { p = $2 } /^Status:.* installed$/ { print p }' "$1" | sort -u; }
+# What the user or a recipe asked for in the package root: what it adds to the base, without what apt pulled in.
+wanted() {
+  auto=$P/root/var/lib/apt/extended_states; [ -f "$auto" ] || auto=/dev/null
+  awk '/^Package:/ { p = $2 } /^Auto-Installed: 1/ { print p }' "$auto" | sort -u > $R/pkgs.auto
+  installed /var/lib/dpkg/status > $R/pkgs.base
+  installed $P/root/var/lib/dpkg/status | comm -23 - $R/pkgs.base | comm -23 - $R/pkgs.auto
 }
 # Applies one layer tar (OCI whiteouts included) to an app's root, as `app` except for the whiteouts.
 apply() {
@@ -114,6 +170,9 @@ boot) # boot <unix time>: once per VM boot: the Mac's clock, rootless podman on 
   install -d -m755 $R/fix $R/fix/etc/ssh/ssh_config.d; install -d -m1777 $R/fix/run; touch $R/fix/run/.containerenv
   mknod $R/fix/etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf c 0 0
   install -d -m755 /data/apps
+  # An upgrade cut off by the VM stopping: its leftovers, or a swap to finish.
+  if [ -d $P/root.ready ] && [ ! -d $P/root ]; then mv $P/root.ready $P/root; mv -f $P/root.ready.base $P/base.sha; fi
+  rm -rf $P/root.old $P/root.next $P/work.next
   ip netns add gw; gw ip link set lo up
   gw sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv4.ip_forward=0
   # TPROXY'd packets (mark 1) are delivered locally.
@@ -296,31 +355,15 @@ pkg-install) # pkg-install <n> <id> <package>: installs a Debian package and wha
   num "$2"; n=$2; id=$3
   case "$4" in ''|-*|*[!a-z0-9.-]*) echo "bad package $4"; exit 2;; esac
   [ -z "$(asapp podman ps -q --filter label=v2mac.pkgs=1)" ] || { echo "busy"; exit 3; }
+  install -d -m755 $P; exec 9>$P/.lock; flock -n 9 || { echo "updating"; exit 3; }
+  if [ -d $P/root.ready ]; then pkgs_promote; fi
   pkglists "$n" "$id"
-  # dpkg must own the base's files (root's), which the rootless `app` can't. So root's podman runs it, but
-  # in a user namespace of its own (300000 on, in the `containers` range): its root is nobody in the VM.
-  # overlayfs can't be idmapped, so its lower layers are: the VM's erofs root (/ itself is an overlay)
-  # and the fixes, where root's files show as 300000's. The upper layer is plain, with 300000's files.
-  install -d -m755 -o 300000 -g 300000 $P/root; install -d -m700 $P/work $P/podman
-  # inner:outer, as in uid_map: the disk's 0 shows as 300000
-  map=X-mount.idmap=0:300000:65536
-  mkdir -p $R/pkgs-base $R/pkgs-fix
-  mountpoint -q $R/pkgs-base || mount -t erofs -o "ro,$map" /dev/vda $R/pkgs-base
-  mountpoint -q $R/pkgs-fix || mount --bind -o "$map" $R/fix $R/pkgs-fix
+  if [ ! -d $P/root ]; then sha256sum /var/lib/dpkg/status | cut -d' ' -f1 > $P/base.sha; fi
+  install -d -m755 -o 300000 -g 300000 $P/root
   # The apps' view of the packages is remounted on next use, after this changed its layer.
-  m=$R/app-pkgs; if mountpoint -q $m; then umount $m/tmp $m/var/tmp $m; fi
-  a=$R/pkgs-apt; mkdir -p $a; if mountpoint -q $a; then umount -l $a; fi
-  mount -t overlay overlay -o "lowerdir=$R/pkgs-fix:$R/pkgs-base,upperdir=$P/root,workdir=$P/work" $a
-  # Not $HARDENED: dpkg needs the namespaced capabilities and a writable root. Its scripts run only here,
-  # on the mini VM's network; the lists stay read-only.
-  pid=$(asapp podman inspect -f '{{.State.Pid}}' "vm-$id")
+  pkgs_unmount
   status=0
-  # shellcheck disable=SC2086
-  # Its own storage on the data disk, root's: overlayfs can't hold podman's storage on the VM's overlay root.
-  podman --root $P/podman --runroot $R/pkgs-podman run --rm --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
-    --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro \
-    -e DEBIAN_FRONTEND=noninteractive --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /var/tmp:rw,exec,mode=1777 \
-    --rootfs "$a" sh -c '
+  aptroot $P/root $P/work "$n" "$id" '
       mkdir -p /var/cache/apt/archives/partial # the rootfs ships without the apt cache
       apt-get $1 -o Debug::NoLocking=true -q install -y --no-install-recommends "$0" && rm -rf /var/cache/apt/archives || exit 1
       for f in $(dpkg -L "$0" | grep "^/usr/share/applications/[^/]*\.desktop$"); do
@@ -329,11 +372,69 @@ pkg-install) # pkg-install <n> <id> <package>: installs a Debian package and wha
           s && $1 == "Exec" && e == "" { e = substr($0, 6) }
           s && $1 == "NoDisplay" { h = $2 } s && $1 == "Terminal" { t = $2 } s && $1 == "Type" { y = $2 }
           END { if (y == "Application" && h != "true" && n != "" && e != "") printf "@@app\t%s\t%s\t%s\t%s\n", t == "true" ? "pty" : "gui", f, n, e }'\'' "$f"
-      done' "$4" "$APT" >$R/pkgs.log 2>&1 || status=$?
-  umount $a
+      done' "$4" "$APT" || status=$?
   # dpkg's first error and what led to it: its last lines only list the packages that depend on the broken one.
   [ $status = 0 ] || { grep -B4 -m1 '^dpkg: error' $R/pkgs.log || tail -n 8 $R/pkgs.log; exit 1; }
   sed -n 's/^@@//p' $R/pkgs.log
+  ;;
+pkg-link) # pkg-link <sha256>: a store recipe's files now sit on the Debian packages (approot)
+  case "$2" in *[!0-9a-f]*|'') exit 2;; esac
+  [ -d "/data/apps/$2/root" ] || { echo "app $2 is not installed"; exit 2; }
+  touch "/data/apps/$2/packages"
+  m=$R/app-$2; if mountpoint -q "$m"; then umount "$m/tmp" "$m/var/tmp" "$m"; fi
+  ;;
+pkg-upgrade) # pkg-upgrade <n> <id> [now]: answers at once, the helper calls it every two minutes. One word:
+  # none, running, failed, waiting (a finished upgrade waits for apps to close), updated, current or started
+  num "$2"
+  [ -d $P/root ] || [ -d $P/root.ready ] || { echo none; exit 0; }
+  flock -n $P/.lock true || { echo running; exit 0; }
+  if [ -f $R/pkgs-upgrade.failed ]; then rm -f $R/pkgs-upgrade.failed; echo failed; tail -n 8 $R/pkgs.log 2>/dev/null || true; exit 0; fi
+  if [ -d $P/root.ready ]; then
+    [ -z "$(asapp podman ps -q --filter label=v2mac.pkgs=1)" ] || { echo waiting; exit 0; }
+    pkgs_promote; echo updated; exit 0
+  fi
+  sum=$(sha256sum /var/lib/dpkg/status | cut -d' ' -f1)
+  if [ "${4:-}" != now ] && [ "$sum" = "$(cat $P/base.sha 2>/dev/null)" ] && [ -n "$(find $P/upgrade-checked -mmin -1440 2>/dev/null)" ]; then echo current; exit 0; fi
+  # Its own process: the agent answers one request at a time, and apps must keep opening during a long download.
+  setsid "$0" pkg-upgrade-work "$2" "$3" "$sum" </dev/null >/dev/null 2>&1 &
+  echo started
+  ;;
+pkg-upgrade-work) # pkg-upgrade-work <n> <id> <base sum>: upgrades a copy of the package root and leaves it as root.ready, so a
+  # failure changes nothing. A new base makes the root anew from what was asked for: its copy of dpkg's status would hide the base's.
+  n=$2; id=$3; sum=$4
+  exec 9>$P/.lock; flock -n 9 || exit 0
+  trap 'st=$?; if [ $st != 0 ]; then rm -rf $P/root.next $P/work.next; touch $R/pkgs-upgrade.failed; touch -d "21 hours ago" $P/upgrade-checked; fi' EXIT
+  fresh=1; if [ "$sum" = "$(cat $P/base.sha 2>/dev/null)" ]; then fresh=0; fi
+  # A new base can bring new sources, which lists fetched before it don't cover.
+  if [ $fresh = 1 ]; then rm -f $P/lists/*_Packages*; fi
+  pkglists "$n" "$id"
+  if [ $fresh = 0 ]; then
+    # shellcheck disable=SC2086
+    asapp podman run --rm --network none $HARDENED -v $P/lists:/var/lib/apt/lists:ro -v $P/root/var/lib/dpkg/status:/tmp/status:ro --rootfs $CTR \
+      apt-get $APT -o Dir::State::status=/tmp/status -s upgrade --with-new-pkgs >$R/pkgs.log 2>&1
+    grep -q '^Inst ' $R/pkgs.log || { touch $P/upgrade-checked; exit 0; }
+  fi
+  # Room for the copy and for what apt adds.
+  [ "$(df -k --output=avail $P | tail -n1)" -gt "$(( $(du -sk $P/root | cut -f1) * 2 ))" ] || { echo "not enough disk space to update" > $R/pkgs.log; exit 1; }
+  rm -rf $P/root.next $P/work.next
+  if [ $fresh = 1 ]; then
+    install -d -m755 -o 300000 -g 300000 $P/root.next
+    # shellcheck disable=SC2046
+    set -- install $(wanted)
+    [ $# = 1 ] && set --
+  else
+    cp -a $P/root $P/root.next
+    set -- upgrade --with-new-pkgs
+  fi
+  if [ $# != 0 ]; then
+    aptroot $P/root.next $P/work.next "$n" "$id" '
+      mkdir -p /var/cache/apt/archives/partial
+      apt-get $0 -o Debug::NoLocking=true -q -y --no-install-recommends -o Dpkg::Options::=--force-confold "$@" && rm -rf /var/cache/apt/archives' "$APT" "$@"
+  fi
+  rm -rf $P/work.next
+  echo "$sum" > $P/root.ready.base
+  mv $P/root.next $P/root.ready
+  touch $P/upgrade-checked
   ;;
 probe) # probe <n> <id> <other n> <other id>: leak probes from mini VM n (plan §9)
   num "$2"; num "$4"

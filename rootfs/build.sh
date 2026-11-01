@@ -37,6 +37,7 @@ mmdebstrap --variant=minbase --mode=root --aptopt='Acquire::Retries "5"' "$@" \
   `# mmdebstrap keeps --aptopt here: a build proxy would be every app's apt proxy in the VM.` \
   --customize-hook='rm -f "$1/etc/apt/apt.conf.d/99mmdebstrap"' \
   --customize-hook='rm -rf "$1/usr/share/doc" "$1/usr/share/man" "$1/var/cache/apt"/* "$1/var/lib/apt/lists"/*' \
-  trixie /tmp/root http://deb.debian.org/debian
+  `# Security and stable updates too: apps and plugins install from this root's sources.` \
+  trixie /tmp/root 'deb http://deb.debian.org/debian trixie main' 'deb http://deb.debian.org/debian trixie-updates main' 'deb http://deb.debian.org/debian-security trixie-security main'
 mkfs.erofs -zlz4hc -T"$SOURCE_DATE_EPOCH" -U 6d2b8c1e-5f0a-4c3e-9b7d-2a1e0f4c8b55 /work/out/rootfs.erofs /tmp/root >/dev/null
 ls -la /work/out/rootfs.erofs

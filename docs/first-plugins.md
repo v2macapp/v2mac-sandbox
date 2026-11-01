@@ -4,13 +4,18 @@ Plan for workspace Phase 9. Everything is built and tested locally with V2MacDev
 key (`plugin-template/docs/plugin-api.md`, "Local testing"). Nothing is pushed, tagged or signed until
 the user says so.
 
-| Order | Plugin | Repo (to be created when the user asks) | Depends on | Sandbox change |
-|---|---|---|---|---|
-| 0 | Security updates in the base | `sandbox` | none | New base and release |
-| 1 | Firefox ESR 0.1.0, Chromium 0.3.0 rebuild | `v2mac-firefox`, `v2mac-chromium` | 0 | None |
-| 2 | SSH | `v2mac-ssh` | 0 | None |
-| 3 | File Viewer + template | `v2mac-file-viewer` | 0 | None |
-| 4 | Telegram | `v2mac-telegram` | 0 and spike T0 | None |
+**Decision (2026-11-01):** the store verifies a recipe and Debian delivers the app. A recipe is a plugin with
+`api: 2` and a `packages` list. Its archive holds only settings and scripts; `apt` installs the packages and
+keeps them updated, so a security fix needs no new tag, CI run or signature. V2Mac tests when Debian moves to a new
+major version. "Verified" for a recipe means "V2Mac reviewed the settings and tested a version", not "these exact bytes".
+
+| Order | Plugin | Repo (to be created when the user asks) | Depends on |
+|---|---|---|---|
+| 0 | Security sources, recipes, automatic updates | `sandbox`, `store`, `plugin-template` | none |
+| 1 | Firefox ESR 0.1.0, Chromium 0.3.0 as recipes | `v2mac-firefox`, `v2mac-chromium` | 0 |
+| 2 | SSH (stays a plain plugin) | `v2mac-ssh` | base from 0 |
+| 3 | File Viewer + template, as a recipe | `v2mac-file-viewer` | 0 |
+| 4 | Telegram, as a recipe | `v2mac-telegram` | 0 and spike T0 |
 
 ## 0. Security updates in the base (do this first)
 
@@ -26,21 +31,30 @@ the user says so.
 Chromium 0.2.0 in the store and Linux Packages installs probably have this gap too. Check the version
 inside the released Chromium archive to confirm.
 
-**Tasks**
-1. Add `deb http://deb.debian.org/debian-security trixie-security main` and `trixie-updates` as
-   mmdebstrap sources in `rootfs/build.sh`. This fixes the root, every later base, plugin builds and
-   Linux Packages together.
-2. Build the base locally and confirm `apt-cache policy firefox-esr` picks the security version.
-3. Release the sandbox when the user says; release CI adds the base to `bases.json`. Add the digest to
-   `store/bases.json`.
-4. Point each plugin's `base.txt` at it. Firefox's current `base.txt` names `v2mac-base-gui`, which
-   isn't in `bases.json` and would fail store CI.
+**Built in `rootfs/build.sh`:** the root now has `trixie-updates` and `trixie-security` sources, which also fixes
+Linux Packages. It needs a sandbox release, and the new base's digest in `store/bases.json` and each `base.txt`.
+Firefox's current `base.txt` names `v2mac-base-gui`, which isn't in `bases.json` and would fail store CI.
 
-**Keeping plugins patched.** A plugin stays frozen at the versions it was built with. Rebuild and
-resubmit Firefox, Chromium and File Viewer monthly, and sooner for a critical Debian advisory. Rebuild
-the others when Debian patches them. The 60-day index-expiry issue is the backstop, not the schedule.
+**Recipes and updates, as built**
+- `packages` in `plugin.json`, api 2. Older sandboxes hide these apps. Store CI and `REVIEW.md` check them.
+- Install: the settings archive loads as usual, `pkg-install` installs each package into the shared package
+  root, and `pkg-link` marks the app so its files sit on that root.
+- Update: the helper calls `pkg-upgrade` when the gateway is ready and every two minutes. It answers at once;
+  the work runs detached, because the agent answers one request at a time and apps must keep opening.
+- A daily check compares against Debian's lists. Any update is applied to a copy of the root, so a failure
+  changes nothing and retries about three hours later. The copy swaps in once no app runs on the packages.
+- A new base (dpkg's status file changed) makes the root anew from what was asked for, so the packages' copy of
+  dpkg's status can't hide the new base's. Upgrading an existing install does this once.
+- The VM stays up while an upgrade runs. "Update Debian Apps Now" is in the store's More menu.
+- `Scripts/test-recipes.py` runs install, upgrade, waiting for open apps and the rebuild in a real VM.
 
-**Done when:** a plugin built on the new base contains the `trixie-security` version.
+**Known limits**
+- A bad Debian update can't be rolled back, since Debian's archive keeps no old versions in the normal suites.
+- Installing a Debian package or recipe still changes the shared root in place, as Linux Packages always has.
+- Updates use the first mini VM with a working exit, preferring one that has Debian apps.
+- A new base re-downloads every Debian app once.
+
+**Done when:** a sandbox release carries this and `test-recipes.py` passes on it.
 
 ## 1. Firefox ESR
 
@@ -48,15 +62,17 @@ The plugin is written and staged, with no commits yet. It has telemetry off, exi
 location, and WebRTC limited to the exit address.
 
 **Tasks**
-1. Move to the new base. It will now install ESR 153, so re-check every pref in `policies.json` against
-   that version, especially `privacy.fingerprintingProtection.overrides`.
+1. It is a recipe now, and `start.sh` warns once when Debian brings a major version other than `tested`. Move to the
+   new base and check every pref in `policies.json` against ESR 153, especially
+   `privacy.fingerprintingProtection.overrides`.
 2. Test in V2MacDev:
    - browser leak tests: exit IP only, no local WebRTC address, exit time zone and location;
    - Persian input, sound, microphone prompt, clipboard, downloads to Shared;
    - reopening after a hard stop, and a second launch being refused.
 3. Decide on exit changes after testing. Location is read at launch, so an exit change applies after
    reopening; the app must say so if it stays that way.
-4. Rebuild Chromium as 0.3.0 on the new base with the same smoke test.
+4. Release Chromium 0.3.0, now a recipe, on the new base with the same smoke test. Installed copies stay frozen until users
+   take that update.
 5. After the user's go-ahead: first commit, create the repo, tag, store PR, `REVIEW.md`. Add the
    "Private browsing" template with `prepare-index.py --template private-browsing "Private browsing" firefox`.
 
@@ -94,7 +110,7 @@ Opens an untrusted document without running its parser on the Mac.
 
 **Design**
 - `display: gui`, permission `shared` only. No sound, microphone or clipboard.
-- Packages: `evince` for PDF, and `libreoffice-writer`, `-calc`, `-impress` with `--no-install-recommends`.
+- A recipe, since it opens hostile files and needs patched parsers. Packages: `evince` for PDF, and `libreoffice-writer`, `-calc`, `-impress` with `--no-install-recommends`.
   No Java.
 - `start.sh` loop: a `zenity` file picker at `~/Shared` (zenity is in the root), then Evince for PDF or
   `soffice --view` for the rest, then back to the picker.
@@ -119,6 +135,7 @@ Both need a sandbox release, so neither is part of v1.
 - A profile change doesn't survive reopening; the home stays empty apart from Shared.
 - PDF, DOCX, XLSX, PPTX and Persian right-to-left text render correctly.
 - Measure the download. If LibreOffice's size is too much, ship a PDF-only version first.
+- After a Debian update, the locked LibreOffice settings still apply.
 
 **Done when:** those test documents behave as above on a release build.
 
@@ -145,8 +162,8 @@ maintain for one app. It stays installable through Linux Packages at the user's 
 
 **Design if it passes**
 - `display: gui`; permissions `clipboard`, `shared`, `sound`, `microphone`.
-- In one `RUN`: add the backports source, `apt-get install -t trixie-backports telegram-desktop`, then
-  remove the source and apt lists.
+- Recipes install from the root's sources, which don't include backports. Telegram needs either backports added
+  for this package alone or a plain plugin with frozen layers: T0 decides. Debian's updates won't solve its age.
 - `start.sh` as Chromium's: `flock` on the data folder, plus any Qt setting T0 shows is needed.
 - `securityNotes` names the Debian version and that the client doesn't update itself.
 - No camera in API v1, so there are no video calls with your own camera. The description says so.
@@ -155,7 +172,7 @@ maintain for one app. It stays installable through Linux Packages at the user's 
 
 ## Release for each plugin
 
-These need the user's instruction and the user's signature:
+These need the user's instruction and the user's signature. After that, Debian's updates need neither:
 
 1. Add the project to the workspace `CLAUDE.md` table and `Scripts/clone-all.sh`, with its own `CLAUDE.md`
    and from `plugin-template` (0BSD).

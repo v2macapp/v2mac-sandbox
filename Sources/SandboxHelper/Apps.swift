@@ -32,6 +32,9 @@ struct PluginManifest: Decodable, Equatable {
     /// copies into the signed index and a sideload reads from the folder.
     var icon: String?
     var iconSvg: String?
+    /// api 2, a recipe: Debian packages `apt` installs and keeps updated. `layers` then holds only the
+    /// plugin's own settings, so "verified" covers the recipe and Debian's signatures cover the packages.
+    var packages: [String]?
 
     struct Layer: Codable, Equatable, Sendable {
         var url: URL
@@ -44,7 +47,7 @@ struct PluginManifest: Decodable, Equatable {
         var commit: String
     }
 
-    static let api = 1
+    static let api = 2
     static let knownPermissions = ["clipboard", "shared", "ssh-agent", "sound", "microphone"]
     /// Granted at install, and asked again each time an open app first uses them.
     static let askedPermissions = ["sound", "microphone", "ssh-agent"]
@@ -79,7 +82,13 @@ struct PluginManifest: Decodable, Equatable {
             guard keyOK, !value.contains(where: { $0 == "\n" || $0 == "\r" || $0 == "\0" }) else { throw Invalid("plugin.json has a bad environment variable \(key).") }
         }
         guard (permissions ?? []).allSatisfy(Self.knownPermissions.contains) else { throw Invalid("plugin.json asks for an unknown permission.") }
+        guard packages == nil || api >= 2, (packages ?? []).count <= 16, (packages ?? []).allSatisfy(Self.isPackage) else { throw Invalid("plugin.json has a bad package list.") }
         guard iconSvg.map({ $0.utf8.count <= Self.maxIcon && Self.image($0) != nil }) ?? true else { throw Invalid("\(name)'s icon is not an SVG image of at most 64 KB.") }
+    }
+
+    /// A word sandbox.sh's pkg-install takes as a package name.
+    static func isPackage(_ name: String) -> Bool {
+        AgentMessage.isWord(name) && !name.hasPrefix("-") && !name.hasPrefix(".") && name == name.lowercased()
     }
 
     static let maxIcon = 64 << 10
@@ -125,6 +134,8 @@ struct InstalledApp: Codable, Identifiable, Equatable, Sendable {
     var answers: [String: Bool] = [:]
     /// The Debian package it came from (Linux Packages); it runs on the shared package root.
     var package: String?
+    /// A store recipe's Debian packages; its own files sit on the shared package root.
+    var packages: [String] = []
 
     init(_ manifest: PluginManifest, granted: [String]) {
         id = manifest.id
@@ -134,6 +145,7 @@ struct InstalledApp: Codable, Identifiable, Equatable, Sendable {
         cmd = manifest.launch.cmd
         env = manifest.launch.env ?? [:]
         iconSvg = manifest.iconSvg
+        packages = manifest.packages ?? []
         self.granted = granted
     }
 
@@ -189,6 +201,7 @@ extension InstalledApp {
         iconSvg = try c.decodeIfPresent(String.self, forKey: .iconSvg)
         answers = try c.decodeIfPresent([String: Bool].self, forKey: .answers) ?? [:]
         package = try c.decodeIfPresent(String.self, forKey: .package)
+        packages = try c.decodeIfPresent([String].self, forKey: .packages) ?? []
     }
 }
 

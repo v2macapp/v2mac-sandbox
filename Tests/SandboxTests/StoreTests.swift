@@ -38,7 +38,7 @@ import Testing
         #expect(throws: Store.Refusal.badSignature) { try Store.verify(index: tampered, signature: try sign(data), key: publicKey, lastVersion: nil) }
         #expect(throws: Store.Refusal.badSignature) { try Store.verify(index: data, signature: try sign(data), lastVersion: nil) } // other key
         #expect(throws: Store.Refusal.rollback(have: 6, got: 5)) { try Store.verify(index: data, signature: try sign(data), key: publicKey, lastVersion: 6) }
-        let newer = index(minApi: 2)
+        let newer = index(minApi: 3)
         #expect(throws: Store.Refusal.tooNew) { try Store.verify(index: newer, signature: try sign(newer), key: publicKey, lastVersion: nil) }
     }
 
@@ -48,7 +48,7 @@ import Testing
     }
 
     @Test func dropsPluginsItCannotUse() throws {
-        for data in [index(layerSHA: "zz"), index(api: 2)] {
+        for data in [index(layerSHA: "zz"), index(api: 3)] {
             #expect(try Store.verify(index: data, signature: try sign(data), key: publicKey, lastVersion: nil, bases: ["base-cli@sha256:b"]).plugins.isEmpty)
         }
         let data = index() // built on a base this sandbox didn't release

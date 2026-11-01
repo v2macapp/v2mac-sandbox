@@ -105,6 +105,8 @@ struct StoreWindow: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu("More", systemImage: "ellipsis") {
                     Button("Refresh Store", systemImage: "arrow.clockwise") { Task { await store.refresh(force: true) } }
+                    Button(gateway.packagesUpdating ? "Updating Debian Apps…" : "Update Debian Apps Now", systemImage: "arrow.down.circle") { gateway.updatePackagesNow() }
+                        .disabled(gateway.packagesUpdating || !gateway.ready)
                     if let target {
                         Button("Add from Folder (Unverified)…", systemImage: "folder.badge.questionmark") { model.sideload(into: target) }
                     }
@@ -232,6 +234,7 @@ private struct StoreDetail: View {
     private var gateway: Gateway { model.gateway }
     private var installed: InstalledApp? { target?.apps.first { $0.id == plugin.id } }
     private var size: Int64 { (plugin.layers ?? []).reduce(0) { $0 + $1.size } }
+    private var isRecipe: Bool { !(plugin.packages ?? []).isEmpty }
 
     var body: some View {
         ScrollView {
@@ -276,12 +279,13 @@ private struct StoreDetail: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(plugin.name).font(.largeTitle.weight(.bold)).lineLimit(2).minimumScaleFactor(0.7)
                 if let publisher = plugin.publisher { Text(publisher).font(.title3).foregroundStyle(.secondary).lineLimit(1) }
-                Label("Verified: signed by the V2Mac store", systemImage: "checkmark.seal.fill")
+                Label(isRecipe ? "Reviewed by V2Mac, updated by Debian" : "Verified: signed by the V2Mac store", systemImage: "checkmark.seal.fill")
                     .font(.callout.weight(.medium)).foregroundStyle(.green).lineLimit(1).truncationMode(.tail)
                     .padding(.horizontal, 9).padding(.vertical, 4)
                     .background(.green.opacity(0.14), in: .capsule)
                     .padding(.top, 4)
-                    .help("Unchanged since it was published. Verified doesn't mean safe: check its permissions.")
+                    .help(isRecipe ? "V2Mac reviewed its settings and tested it. Debian signs the app and its updates, which arrive without a new V2Mac review. This doesn't mean safe: check its permissions."
+                        : "Unchanged since it was published. Verified doesn't mean safe: check its permissions.")
             }
             .layoutPriority(1) // the name gets the room first; the button side shrinks
             Spacer(minLength: 16)
@@ -294,7 +298,11 @@ private struct StoreDetail: View {
         HStack(spacing: 0) {
             fact("Version", plugin.version, "number")
             Divider().frame(height: 36)
-            fact("Size", ByteCountFormatter.string(fromByteCount: size, countStyle: .file), "arrow.down.circle")
+            if isRecipe {
+                fact("Source", "Debian", "shippingbox")
+            } else {
+                fact("Size", ByteCountFormatter.string(fromByteCount: size, countStyle: .file), "arrow.down.circle")
+            }
             Divider().frame(height: 36)
             fact("Type", plugin.display == "gui" ? String(localized: "Window") : String(localized: "Terminal"),
                  plugin.display == "gui" ? "macwindow" : "apple.terminal")

@@ -19,6 +19,8 @@ import V2MacCore
     @ObservationIgnored private(set) var facts: [String: ExitFacts] = [:]
     /// The mini VMs are set up in the running VM.
     private(set) var ready = false
+    /// Debian packages are being upgraded in the background (plan §10).
+    private(set) var packagesUpdating = false
 
     var corePath: URL?
     /// Asks V2Mac for a server's outbound; the answer comes back through `received`.
@@ -90,6 +92,7 @@ import V2MacCore
         case .running: enqueue { await self.apply() }
         case .stopped, .stopping:
             ready = false
+            setPackagesUpdating(false)
             booted = false
             inGuest = []
             relays = [:]
@@ -190,11 +193,12 @@ import V2MacCore
         ready = true
         log("gateway ready with \(vms.count) mini VMs")
         await checkExits()
+        await upgradePackages()
         watch?.cancel()
         watch = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(120))
-                if !Task.isCancelled { self.enqueue { await self.checkExits() } }
+                if !Task.isCancelled { self.enqueue { await self.checkExits(); await self.upgradePackages() } }
             }
         }
     }
@@ -266,6 +270,7 @@ import V2MacCore
 
     /// Installs (or updates) an app in a mini VM with the approved permissions and makes its Mac app.
     func install(_ manifest: PluginManifest, granted: [String], in mini: MiniVM) throws {
+        guard (manifest.packages ?? []).isEmpty else { throw PluginManifest.Invalid("\(manifest.name) needs Debian packages, which only the V2Mac store installs.") }
         guard let current = vms.first(where: { $0.id == mini.id }) else { return }
         let app = InstalledApp(manifest, granted: granted)
         try StubApps.make(app, in: current, socket: ptySocket)
@@ -333,6 +338,12 @@ import V2MacCore
             }
             image = layer.sha256
         }
+        if let packages = manifest.packages, !packages.isEmpty, let image {
+            for package in packages { _ = try await aptInstall(package, in: mini) }
+            guard await enqueueResult({ await self.run(["pkg-link", image]) }).value.ok else {
+                throw PluginManifest.Invalid("\(manifest.name) could not be loaded in the sandbox.")
+            }
+        }
         guard let current = vms.first(where: { $0.id == mini.id }) else { return }
         var app = InstalledApp(manifest, granted: granted)
         app.unverified = false
@@ -387,21 +398,49 @@ import V2MacCore
         guard installs[key] == nil else { return [] }
         installs[key] = Install(name: name, fraction: nil)
         defer { installs[key] = nil }
-        // apt downloads and unpacks a whole program with its libraries: minutes.
-        let result = await enqueueResult { await self.run(["pkg-install", String(mini.index), mini.id, name], timeoutMS: 1_800_000) }.value
-        guard result.ok else {
-            if result.output.hasPrefix("busy") { throw PluginManifest.Invalid("Close the Debian apps and Terminals of every mini VM, then install again: they run on the packages being changed.") }
-            log("pkg-install \(name) failed: \(result.output.suffix(2000))")
-            throw PluginManifest.Invalid("\(name) could not be installed:\n\(result.output.suffix(600))")
-        }
+        let output = try await aptInstall(name, in: mini)
         guard let current = vms.first(where: { $0.id == mini.id }) else { return [] }
-        let apps = result.output.split(separator: "\n").compactMap { InstalledApp(package: name, line: $0, granted: granted) }
+        let apps = output.split(separator: "\n").compactMap { InstalledApp(package: name, line: $0, granted: granted) }
         for app in apps {
             try StubApps.make(app, in: current, socket: ptySocket)
             put(app, in: mini.id)
         }
         return apps
     }
+
+    /// `pkg-install`'s answer: the apps a package brings.
+    private func aptInstall(_ name: String, in mini: MiniVM) async throws -> String {
+        // apt downloads and unpacks a whole program with its libraries: minutes.
+        let result = await enqueueResult { await self.run(["pkg-install", String(mini.index), mini.id, name], timeoutMS: 1_800_000) }.value
+        guard result.ok else {
+            if result.output.hasPrefix("busy") { throw PluginManifest.Invalid("Close the Debian apps and Terminals of every mini VM, then install again: they run on the packages being changed.") }
+            if result.output.hasPrefix("updating") { throw PluginManifest.Invalid("Debian apps are being updated. Install again when that has finished.") }
+            log("pkg-install \(name) failed: \(result.output.suffix(2000))")
+            throw PluginManifest.Invalid("\(name) could not be installed:\n\(result.output.suffix(600))")
+        }
+        return result.output
+    }
+
+    /// Debian packages update on their own (plan §10): checked daily through an exit that works, preferably
+    /// that of a mini VM with Debian apps; swapped in once none of those apps is open.
+    private func upgradePackages(now: Bool = false) async {
+        func working(_ mini: MiniVM) -> Bool { if case .ok = exits[mini.id] { inGuest.contains(mini.id) } else { false } }
+        let candidates = vms.filter(working)
+        guard let mini = candidates.first(where: { $0.apps.contains { $0.package != nil || !$0.packages.isEmpty } }) ?? candidates.first else { return }
+        let result = await run(["pkg-upgrade", String(mini.index), mini.id] + (now ? ["now"] : []))
+        let state = result.output.split(separator: "\n").first.map(String.init) ?? ""
+        setPackagesUpdating(["running", "started"].contains(state))
+        if state == "failed" { log("Debian package update failed: \(result.output.suffix(1000))") }
+        else if state != "current", state != "none", state != "running" { log("Debian packages: \(state)") }
+    }
+
+    private func setPackagesUpdating(_ on: Bool) {
+        guard on != packagesUpdating else { return }
+        packagesUpdating = on
+        if on { vm.hold() } else { vm.release() }
+    }
+
+    func updatePackagesNow() { enqueue { await self.upgradePackages(now: true) } }
 
     /// A store app's files in the VM, once no mini VM has that version any more.
     private func removeIfUnused(_ image: String) {

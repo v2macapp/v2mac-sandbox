@@ -3718,6 +3718,138 @@
           }
         }
       }
+    },
+    "Debian apps are being updated. Install again when that has finished.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "برنامه‌های Debian در حال به‌روزرسانی هستند. پس از پایان آن دوباره نصب کنید."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложения Debian обновляются. Установите снова, когда это закончится."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新 Debian 应用。完成后请重新安装。"
+          }
+        }
+      }
+    },
+    "Reviewed by V2Mac, updated by Debian": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بررسی‌شده توسط V2Mac، به‌روزرسانی توسط Debian"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверено V2Mac, обновляется Debian"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 V2Mac 审核，由 Debian 更新"
+          }
+        }
+      }
+    },
+    "Update Debian Apps Now": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "به‌روزرسانی برنامه‌های Debian"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить приложения Debian"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即更新 Debian 应用"
+          }
+        }
+      }
+    },
+    "Updating Debian Apps…": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "در حال به‌روزرسانی برنامه‌های Debian…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление приложений Debian…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新 Debian 应用…"
+          }
+        }
+      }
+    },
+    "V2Mac reviewed its settings and tested it. Debian signs the app and its updates, which arrive without a new V2Mac review. This doesn't mean safe: check its permissions.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac تنظیماتش را بررسی و آن را آزمایش کرده است. Debian برنامه و به‌روزرسانی‌هایش را امضا می‌کند و این به‌روزرسانی‌ها بدون بررسی دوبارهٔ V2Mac می‌رسند. این به معنای امن بودن نیست: مجوزهایش را بررسی کنید."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac проверил его настройки и протестировал его. Debian подписывает приложение и обновления, которые приходят без новой проверки V2Mac. Это не значит, что оно безопасно: проверьте его разрешения."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac 审核了它的设置并做过测试。Debian 为应用及其更新签名，更新不经 V2Mac 再次审核。这并不代表安全：请检查它的权限。"
+          }
+        }
+      }
+    },
+    "V2Mac reviewed its settings. Its Debian packages (%@) are signed and updated by Debian.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac تنظیماتش را بررسی کرده است. بسته‌های Debian آن (%@) توسط Debian امضا و به‌روزرسانی می‌شوند."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac проверил его настройки. Его пакеты Debian (%@) подписывает и обновляет Debian."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac 审核了它的设置。它的 Debian 软件包（%@）由 Debian 签名和更新。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

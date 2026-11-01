@@ -481,6 +481,7 @@ private struct VMDetail<Actions: View>: View {
             if let source = app.source { lines.append(String(localized: "Source: \(source.repo) at \(source.commit)")) }
             let listed = model.store.index?.plugin(app.id)
             lines.append(listed?.version == app.version && listed?.layers == app.layers ? String(localized: "Listed in the signed store index.") : String(localized: "Not in the current signed store index as installed."))
+            if !app.packages.isEmpty { lines.append(String(localized: "V2Mac reviewed its settings. Its Debian packages (\(app.packages.joined(separator: ", "))) are signed and updated by Debian.")) }
             if let revoked = model.store.index?.revocation(of: app) { lines.append(String(localized: "Withdrawn: \(revoked.reason)")) }
             let intact = app.layers.allSatisfy { (try? SandboxFiles.sha256(of: gateway.layerCache.appendingPathComponent($0.sha256))) == $0.sha256 }
             lines.append(intact ? String(localized: "Layers re-hashed: unchanged since published.") : String(localized: "Layers re-hashed: CHANGED or missing."))

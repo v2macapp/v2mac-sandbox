@@ -69,6 +69,12 @@ import Virtualization
         if state == .stopped { boot(ramCapMB: ramCapMB) }
     }
 
+    /// Keeps a running VM up with no window or app, for work of its own; ended with `release`.
+    func hold() {
+        users += 1
+        idleTask?.cancel()
+    }
+
     func release() {
         users = max(0, users - 1)
         guard users == 0 else { return }

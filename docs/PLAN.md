@@ -151,7 +151,7 @@ changelog, securityNotes
 The runtime gives every app: `/run/v2mac/exit.json` (country, city, lat/lon, IANA timezone, exit IP;
 read-only, replaced atomically, watch with inotify), `TZ` at launch, `~/Shared` (only with `shared`),
 a home on the data disk (tmpfs when Disposable). Nothing else: no vsock, nft, other pods or host paths.
-Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change means `api: 2` and
+Api 2 adds `packages`: a recipe whose apps `apt` installs and updates (`first-plugins.md`). Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change means `api: 2` and
 `api: 1` keeps working.
 
 ## 7. Store, trust, SDK
@@ -226,9 +226,9 @@ Plugins with a newer `api` are hidden with "Update V2Mac"; a breaking change mea
   becomes an app (`deb-<file>`, window or Terminal) in that mini VM, with the permissions approved at
   install; the mini VM's Terminal and sideloads see the packages too. Debian's signatures are the
   trust; the UI says these are not reviewed by V2Mac. First version leaves out: removing packages
-  (apps go, files stay), upgrades, icons, a streamed log, per-package roots, Flathub, and packages
-  whose files belong to other users (only one uid is mapped, so dpkg can't chown to them). After a
-  sandbox update the packages' copy of dpkg's status hides the new base's, so a reinstall may be needed.
+  (apps go, files stay), icons, a streamed log, per-package roots, Flathub, and packages
+  whose files belong to other users (only one uid is mapped, so dpkg can't chown to them).
+  Updates and store recipes (api 2 `packages`): `first-plugins.md`.
 - GPU rendering (libkrun) if needed; plugin `settings` (api 2); more permissions.
 
 ## 11. Milestones (each behind "Sandbox (beta)", dev build first)
