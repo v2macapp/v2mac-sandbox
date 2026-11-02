@@ -121,6 +121,8 @@ Sandbox core (helper's xray, CoreRunner): inbound vm-A (VLESS, per-VM UUID) → 
   draws into a `CALayer`. The RFB parser treats the guest as hostile: every rectangle (and CopyRect
 source) is checked against the framebuffer and the size is capped before any write. Non-ASCII text
 (Persian, IMEs) goes over a separate text message that the agent types with `wtype` (M0 0.8). Xpra, Waypipe, Weston RAIL, `VZVirtualMachineView` rejected.
+  Only the Mac's cursor shows: sway's would be drawn into every frame (headless has no hardware cursor), so `gui` gives it a
+  transparent theme. The Mac's cursor stays an arrow; following the app's shape would need RFB's Cursor encoding.
 - **`pty`**: the generated app opens the user's Terminal running the helper's `v2mac-pty`, which
   bridges the pty over a Unix socket → helper → vsock; resize, signals, ssh-agent (if approved).
 - **One Mac app per app per mini VM**: `~/Applications/V2Mac Sandbox/<App> — <VM>.app`, a copy of the

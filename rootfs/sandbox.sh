@@ -272,10 +272,12 @@ gui) # gui <token> <n> <id> <plugin> <disposable> <shared> <clipboard> <sound po
   fi
   chown app "$R/plugin-$id-$p.env"
   # MOZ_ASSUME_USER_NS=0: Firefox's tabs can't make a user namespace here (uid_map EPERM) and would crash.
+  # XCURSOR_PATH: only a transparent cursor, since the Mac draws its own and sway's would be in every frame as a second one.
+  # sway loads the theme named "default"; mounted from the VM's root so apps on an earlier base get it too.
   # shellcheck disable=SC2086
   xargs -0 -a "$R/plugin-$id-$p.argv" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --name "gui-$t" \
-    --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $shared $sound -v "$d:/run/vnc" \
-    -e XDG_RUNTIME_DIR=/run/vnc -e WLR_BACKENDS=headless -e WLR_RENDERER=pixman -e WLR_LIBINPUT_NO_DEVICES=1 -e LANG=C.UTF-8 -e MOZ_ASSUME_USER_NS=0 \
+    --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $shared $sound -v "$d:/run/vnc" -v /usr/share/v2mac/cursors:/run/cursors:ro \
+    -e XDG_RUNTIME_DIR=/run/vnc -e XCURSOR_PATH=/run/cursors -e WLR_BACKENDS=headless -e WLR_RENDERER=pixman -e WLR_LIBINPUT_NO_DEVICES=1 -e LANG=C.UTF-8 -e MOZ_ASSUME_USER_NS=0 \
     --env-file "$R/plugin-$id-$p.env" -v "$R/resolv-$n:/etc/resolv.conf:ro" $(facts "$id") -w /root $root \
     sh -c 'sway -c /etc/v2mac/sway.conf >/run/vnc/sway.log 2>&1 & sway=$!
       for _ in $(seq 100); do for w in /run/vnc/wayland-*; do [ -S "$w" ] && break 2; done; sleep 0.1; done

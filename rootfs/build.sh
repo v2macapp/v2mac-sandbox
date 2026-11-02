@@ -30,6 +30,7 @@ mmdebstrap --variant=minbase --mode=root --aptopt='Acquire::Retries "5"' "$@" \
   --customize-hook="python3 $R/seccomp-vsock.py \"\$1/usr/share/containers/seccomp.json\" \"\$1/etc/v2mac-seccomp.json\"" \
   --customize-hook='echo "SUBSYSTEM==\"sound\", MODE=\"0666\"" > "$1/etc/udev/rules.d/60-v2mac-sound.rules"' \
   --customize-hook="install -D -m644 $R/sway.conf \"\$1/etc/v2mac/sway.conf\"" \
+  --customize-hook="install -D -m644 $R/invisible.xcursor \"\$1/usr/share/v2mac/cursors/default/cursors/default\"" \
   --customize-hook="install -D -m644 $R/pipewire-alsa.conf \"\$1/etc/pipewire/pipewire.conf.d/v2mac-alsa.conf\"" \
   --customize-hook="install -m644 $R/containers.conf \"\$1/etc/containers/\"" \
   `# mmdebstrap copies the build container's random hostname; a fixed one keeps the image reproducible.` \
