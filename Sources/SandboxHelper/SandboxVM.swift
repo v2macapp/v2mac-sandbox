@@ -14,7 +14,7 @@ import Virtualization
 
     private let root: URL
     private var vm: VZVirtualMachine?
-    private var agent: VZVirtioSocketConnection?
+    private var agent: AgentChannel?
     private var users = 0
     private var idleTask: Task<Void, Never>?
     private var console: FileHandle?
@@ -31,30 +31,20 @@ import Virtualization
         VZMultipleDirectoryShare(directories: shares.reduce(into: [:]) { $0[$1.key] = VZSharedDirectory(url: $1.value, readOnly: $1.key == "_cache") })
     }
 
-    /// Sends one request to the agent and waits for its answer; nil when the VM is down or the agent
-    /// says something unexpected. Requests are answered in order, one at a time, so `timeoutMS` must
-    /// outlast the slowest answer: a late one would be read as the next request's.
+    /// Sends one request to the agent and waits for its answer; nil when the VM is down, the agent
+    /// is reconnecting, or the answer did not come within `timeoutMS`. A failed exchange closes the
+    /// connection and opens a new one, so a late answer is never read as the next request's.
     func call(_ message: AgentMessage, timeoutMS: Int32 = 180_000) async -> AgentMessage? {
-        guard state == .running, let fd = agent?.fileDescriptor else { return nil }
-        return await withCheckedContinuation { continuation in
-            agentQueue.async {
-                let frame = message.frame
-                let sent = frame.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) } == frame.count
-                continuation.resume(returning: sent ? Self.readMessage(fd, timeoutMS: timeoutMS) : nil)
-            }
+        guard state == .running, let channel = agent else { return nil }
+        let answer = await withCheckedContinuation { continuation in
+            agentQueue.async { continuation.resume(returning: channel.exchange(message, timeout: .milliseconds(timeoutMS))) }
         }
-    }
-
-    nonisolated static func readMessage(_ fd: Int32, timeoutMS: Int32) -> AgentMessage? {
-        var reader = AgentMessage.Reader()
-        var buf = [UInt8](repeating: 0, count: 16384)
-        var poller = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-        while poll(&poller, 1, timeoutMS) > 0 {
-            let n = read(fd, &buf, buf.count)
-            guard n > 0, let messages = try? reader.feed(buf[0..<n]) else { return nil }
-            if let first = messages.first { return first }
+        if answer == nil, channel.isClosed, agent === channel, state == .running {
+            log("the agent did not answer in time or broke the protocol; reconnecting")
+            agent = nil
+            connectAgent(deadline: .now + .seconds(30))
         }
-        return nil
+        return answer
     }
 
     init(root: URL) { self.root = root }
@@ -106,7 +96,7 @@ import Virtualization
     func stop() async {
         guard let vm, state == .booting || state == .running else { return }
         state = .stopping
-        if let agent { _ = AgentMessage.shutdown.frame.withUnsafeBytes { write(agent.fileDescriptor, $0.baseAddress, $0.count) } }
+        _ = agent?.send(AgentMessage.shutdown)
         for _ in 0..<100 where vm.state != .stopped { try? await Task.sleep(for: .milliseconds(100)) }
         if vm.state != .stopped { try? await vm.stop() }
         reset()
@@ -159,16 +149,18 @@ import Virtualization
         try handle.truncate(atOffset: Self.dataDiskSize)
     }
 
-    /// The agent starts late in boot, so connecting is retried until it says hello.
+    /// The agent starts late in boot, so connecting is retried until it says hello. Also reconnects a
+    /// running VM after a failed call.
     private func connectAgent(deadline: ContinuousClock.Instant) {
-        guard state == .booting, let device = vm?.socketDevices.first as? VZVirtioSocketDevice else { return }
+        guard state == .booting || state == .running, agent == nil,
+              let device = vm?.socketDevices.first as? VZVirtioSocketDevice else { return }
         device.connect(toPort: AgentMessage.port) { result in
             nonisolated(unsafe) var said: VZVirtioSocketConnection?
             if case .success(let connection) = result, Self.readHello(connection.fileDescriptor) { said = connection }
             // Hop to the main queue before the next connect: a connect from inside a handler crashes VZ (M0 0.4).
             DispatchQueue.main.async {
                 if let connection = said {
-                    self.agent = connection
+                    self.agent = AgentChannel(fd: connection.fileDescriptor) { connection.close() }
                     self.state = .running
                 } else if ContinuousClock.now < deadline {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.connectAgent(deadline: deadline) }
@@ -181,7 +173,7 @@ import Virtualization
     }
 
     private nonisolated static func readHello(_ fd: Int32) -> Bool {
-        readMessage(fd, timeoutMS: 2000) == .hello(version: AgentMessage.version)
+        AgentChannel.readMessage(fd, until: .now + .seconds(2)) == .hello(version: AgentMessage.version)
     }
 
     private func reset() {
@@ -201,6 +193,60 @@ import Virtualization
             log("VM stopped: \(error.localizedDescription)")
             self.reset()
         }
+    }
+}
+
+/// One connection to the agent (plan §3). `exchange` runs on the VM's serial agent queue; after any
+/// failure (short write, no answer by the deadline, end of stream, bad frame) the connection is closed
+/// for good, so an answer that comes late can never be taken for the next request's.
+final class AgentChannel: @unchecked Sendable {
+    private let fd: Int32
+    private let closeConnection: () -> Void
+    private let lock = NSLock()
+    private var closed = false
+
+    init(fd: Int32, close: @escaping () -> Void) {
+        self.fd = fd
+        closeConnection = close
+    }
+
+    var isClosed: Bool { lock.withLock { closed } }
+
+    /// One request and its answer, both within `timeout` counted from now.
+    func exchange(_ message: AgentMessage, timeout: Duration) -> AgentMessage? {
+        let deadline = ContinuousClock.now + timeout
+        if send(message), let answer = Self.readMessage(fd, until: deadline) { return answer }
+        close()
+        return nil
+    }
+
+    /// Writes one frame unless the channel is closed. Locked so `stop` can send from the main actor.
+    func send(_ message: AgentMessage) -> Bool {
+        let frame = message.frame
+        return lock.withLock { !closed && frame.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) } == frame.count }
+    }
+
+    func close() {
+        lock.withLock {
+            guard !closed else { return }
+            closed = true
+            closeConnection()
+        }
+    }
+
+    /// The first whole message, or nil at end of stream, on a bad frame or at the deadline. The
+    /// deadline is absolute: a peer sending a byte at a time cannot stretch it.
+    static func readMessage(_ fd: Int32, until deadline: ContinuousClock.Instant) -> AgentMessage? {
+        var reader = AgentMessage.Reader()
+        var buf = [UInt8](repeating: 0, count: 16384)
+        var poller = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+        while case let left = deadline - .now, left > .zero,
+              poll(&poller, 1, Int32(max(1, (left / .milliseconds(1)).rounded(.up)))) > 0 {
+            let n = read(fd, &buf, buf.count)
+            guard n > 0, let messages = try? reader.feed(buf[0..<n]) else { return nil }
+            if let first = messages.first { return first }
+        }
+        return nil
     }
 }
 
