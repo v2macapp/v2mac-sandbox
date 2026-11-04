@@ -173,6 +173,14 @@ struct InstalledApp: Codable, Identifiable, Equatable, Sendable {
         self.package = package
     }
 
+    /// The apps of `pkg-install`'s answer, leaving out any whose id another app of the mini VM (`existing`)
+    /// or an earlier line already has (review F05): a package never takes another app's place.
+    static func discovered(package: String, output: String, granted: [String], besides existing: [InstalledApp]) -> [InstalledApp] {
+        var taken = Set(existing.filter { $0.package != package }.map(\.id))
+        return output.split(separator: "\n").compactMap { InstalledApp(package: package, line: $0, granted: granted) }
+            .filter { taken.insert($0.id).inserted }
+    }
+
     /// Every mini VM's own shell, with nothing to install: the VM's root and no permissions. Its id
     /// starts with "." so no plugin can take it (plugin ids can't).
     static let terminal = InstalledApp(PluginManifest(api: 1, id: ".terminal", name: "Terminal", version: "", display: "pty",

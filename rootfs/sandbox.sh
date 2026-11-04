@@ -73,7 +73,8 @@ pkgs_promote() {
   rm -rf $P/root.old
 }
 # aptroot <upper> <work> <n> <id> <script> [its $0 and args]: runs the script as root over the VM's root with
-# <upper> as the writable layer, on mini VM n's network; output in $R/pkgs.log.
+# <upper> as the writable layer, on mini VM n's network; output in $R/pkgs.log. /v2mac-out is an empty
+# folder ($R/pkgs-out) for answers that must not mix with what the packages print.
 aptroot() {
   up=$1; wk=$2; n=$3; id=$4; shift 4
   # dpkg must own the base's files (root's), which the rootless `app` can't. So root's podman runs it, but
@@ -90,12 +91,13 @@ aptroot() {
   mount -t overlay overlay -o "lowerdir=$R/pkgs-fix:$R/pkgs-base,upperdir=$up,workdir=$wk" $a
   # Not $HARDENED: dpkg needs the namespaced capabilities and a writable root. Its scripts run only here,
   # on the mini VM's network; the lists stay read-only.
+  rm -rf $R/pkgs-out; install -d -m700 -o 300000 -g 300000 $R/pkgs-out
   pid=$(asapp podman inspect -f '{{.State.Pid}}' "vm-$id")
   status=0
   # shellcheck disable=SC2086
   # Its own storage on the data disk, root's: overlayfs can't hold podman's storage on the VM's overlay root.
   podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
-    --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro \
+    --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro -v $R/pkgs-out:/v2mac-out \
     -e DEBIAN_FRONTEND=noninteractive --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /var/tmp:rw,exec,mode=1777 \
     --rootfs "$a" sh -c "$@" >$R/pkgs.log 2>&1 || status=$?
   umount $a
@@ -368,18 +370,20 @@ pkg-install) # pkg-install <n> <id> <package>: installs a Debian package and wha
   aptroot $P/root $P/work "$n" "$id" '
       mkdir -p /var/cache/apt/archives/partial # the rootfs ships without the apt cache
       apt-get $1 -o Debug::NoLocking=true -q install -y --no-install-recommends "$0" && rm -rf /var/cache/apt/archives || exit 1
+      # Review F05: the apps go to their own file, after anything the package started is gone (this sh is PID 1).
+      kill -9 -1 2>/dev/null; rm -rf /v2mac-out/apps
       for f in $(dpkg -L "$0" | grep "^/usr/share/applications/[^/]*\.desktop$"); do
         awk -F= -v f="${f##*/}" '\''/^\[/ { s = $0 == "[Desktop Entry]" }
           s && $1 == "Name" && n == "" { n = substr($0, 6) }
           s && $1 == "Exec" && e == "" { e = substr($0, 6) }
           s && $1 == "NoDisplay" { h = $2 } s && $1 == "Terminal" { t = $2 } s && $1 == "Type" { y = $2 }
-          END { if (y == "Application" && h != "true" && n != "" && e != "") printf "@@app\t%s\t%s\t%s\t%s\n", t == "true" ? "pty" : "gui", f, n, e }'\'' "$f"
-      done' "$4" "$APT" || status=$?
+          END { if (y == "Application" && h != "true" && n != "" && e != "") printf "app\t%s\t%s\t%s\t%s\n", t == "true" ? "pty" : "gui", f, n, e }'\'' "$f"
+      done > /v2mac-out/apps' "$4" "$APT" || status=$?
   # dpkg's first error and what led to it: its last lines only list the packages that depend on the broken one.
   [ $status = 0 ] || { grep -B4 -m1 '^dpkg: error' $R/pkgs.log || tail -n 8 $R/pkgs.log; exit 1; }
   # Just installed from fresh lists: an upgrade now would find nothing and block the next install.
   touch $P/upgrade-checked
-  sed -n 's/^@@//p' $R/pkgs.log
+  f=$R/pkgs-out/apps; if [ -f $f ] && [ ! -L $f ]; then head -c 65536 $f; fi
   ;;
 pkg-link) # pkg-link <sha256>: a store recipe's files now sit on the Debian packages (approot)
   case "$2" in *[!0-9a-f]*|'') exit 2;; esac

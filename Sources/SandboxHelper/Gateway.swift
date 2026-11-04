@@ -400,7 +400,7 @@ import V2MacCore
         defer { installs[key] = nil }
         let output = try await aptInstall(name, in: mini)
         guard let current = vms.first(where: { $0.id == mini.id }) else { return [] }
-        let apps = output.split(separator: "\n").compactMap { InstalledApp(package: name, line: $0, granted: granted) }
+        let apps = InstalledApp.discovered(package: name, output: output, granted: granted, besides: current.apps)
         for app in apps {
             try StubApps.make(app, in: current, socket: ptySocket)
             put(app, in: mini.id)
