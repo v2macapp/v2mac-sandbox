@@ -293,14 +293,23 @@ private struct VMDetail<Actions: View>: View {
                     }
                 }
                 LabeledContent {
-                    Button("Show in Finder") { NSWorkspace.shared.open(gateway.sharedFolder(vm)) }
+                    HStack {
+                        Button("Export…") { export(from: gateway.sharedFolder(vm)) }
+                        Button("Show in Finder") { NSWorkspace.shared.open(gateway.sharedFolder(vm)) }
+                    }
                 } label: {
                     Label("Shared folder", systemImage: "folder")
                 }
             } header: {
                 Text("Privacy")
             } footer: {
-                Text("Apps also need the clipboard permission to use the clipboard.").font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading) {
+                    if let problem = QuarantineWatcher.Status.shared.problem {
+                        Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    Text("Export copies a file to your Mac marked as downloaded, so macOS checks it before it opens. Apps also need the clipboard permission to use the clipboard.")
+                        .foregroundStyle(.secondary)
+                }.font(.caption)
             }
         }
         .formStyle(.grouped)
@@ -470,6 +479,20 @@ private struct VMDetail<Actions: View>: View {
 
     /// Verify Installation (plan §7): where it came from and whether its layers are unchanged since
     /// published. "Verified" means unchanged, not safe.
+    /// Review F23: the way out of the Shared folder that never shows an unflagged file on the Mac.
+    private func export(from shared: URL) {
+        let pick = NSOpenPanel()
+        pick.directoryURL = shared
+        pick.canChooseDirectories = true
+        pick.message = String(localized: "Choose what to copy to your Mac")
+        guard pick.runModal() == .OK, let source = pick.url else { return }
+        let save = NSSavePanel()
+        save.nameFieldStringValue = source.lastPathComponent
+        save.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        guard save.runModal() == .OK, let target = save.url else { return }
+        do { try QuarantineWatcher.export(source, from: shared, to: target) } catch { NSAlert(error: error).runModal() }
+    }
+
     private func verify(_ app: InstalledApp) {
         let granted = app.granted.isEmpty ? String(localized: "none") : app.granted.joined(separator: ", ")
         var lines = [String(localized: "Version \(app.version)"), String(localized: "Permissions: \(granted)")]
