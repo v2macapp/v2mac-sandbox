@@ -102,6 +102,7 @@ Gateway netns (VM, root, apps can't touch it)
    relay (agent: TCP → vsock 2:<port A>)
    │ virtio-vsock
 Helper: VZVirtioSocketListener port A → 127.0.0.1:<sandbox core inbound vm-A>
+   (at most 256 open per mini VM, 768 in all but 16 each always, 10 min idle; one more is refused, never sent elsewhere)
 Sandbox core (helper's xray, CoreRunner): inbound vm-A (VLESS, per-VM UUID) → outbound vm-A
    outbound vm-A = JSON from V2Mac (proxyOutbound + NIC binding)
 ```
