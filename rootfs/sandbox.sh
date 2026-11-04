@@ -53,7 +53,7 @@ pkglists() {
   [ -n "$(find $P/lists -maxdepth 1 -name '*_Packages*' -mmin -1440)" ] && return 0
   # Ends before the helper stops waiting (15 minutes), so a slow exit gets apt's own error back.
   # shellcheck disable=SC2086
-  asapp podman run --rm --timeout 600 $HARDENED $(aptnet "$1" "$2") --rootfs $CTR apt-get $APT -q update --error-on=any >$R/pkgs.log 2>&1 \
+  inslice "$1" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --timeout 600 $HARDENED $(aptnet "$1" "$2") --rootfs $CTR apt-get $APT -q update --error-on=any >$R/pkgs.log 2>&1 \
     || { grep -E "^(W|E):" $R/pkgs.log | head -n 5; tail -n 3 $R/pkgs.log; exit 1; }
 }
 # Unmounts every app's view of the packages; each is remounted on next use. Only with nothing running on them.
@@ -96,7 +96,8 @@ aptroot() {
   status=0
   # shellcheck disable=SC2086
   # Its own storage on the data disk, root's: overlayfs can't hold podman's storage on the VM's overlay root.
-  podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
+  # In the slice of the mini VM it downloads for; --cgroups=disabled keeps root's podman from making its own.
+  inslice "$n" podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --cgroups=disabled --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
     --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro -v $R/pkgs-out:/v2mac-out \
     -e DEBIAN_FRONTEND=noninteractive --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /var/tmp:rw,exec,mode=1777 \
     --rootfs "$a" sh -c "$@" >$R/pkgs.log 2>&1 || status=$?
@@ -147,6 +148,25 @@ bridge() {
   done
   [ -n "$pid" ] && kill -- "-$pid" 2>/dev/null
 }
+# Review F10: mini VM n's share of the VM. Everything it runs is in the slice v2mac-vm<n> (rootless podman
+# can't set limits itself, spike 0.5), whose limits are read back from the kernel, not assumed. All mini VMs
+# together leave 512 MB to the agent, the gateway and the page cache; one alone gets three quarters.
+VMSLICE_TASKS=4096
+VMSLICE_WEIGHT=100
+limits() {
+  mb=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)
+  all=$((mb - 512)); one=$((mb * 3 / 4)); [ $one -le $all ] || one=$all
+  systemctl set-property --runtime v2mac.slice MemoryMax=${all}M
+  systemctl set-property --runtime "v2mac-vm$1.slice" MemoryMax=${one}M TasksMax=$VMSLICE_TASKS CPUWeight=$VMSLICE_WEIGHT
+  # The slice's cgroup exists once something runs in it.
+  systemd-run --scope -q --collect --slice="v2mac-vm$1.slice" true
+  c=/sys/fs/cgroup/v2mac.slice/v2mac-vm$1.slice
+  got="$(cat /sys/fs/cgroup/v2mac.slice/memory.max $c/memory.max $c/pids.max $c/cpu.weight 2>&1 | tr '\n' ' ')"
+  [ "$got" = "$((all << 20)) $((one << 20)) $VMSLICE_TASKS $VMSLICE_WEIGHT " ] || { echo "limits for mini VM $1 not in force: $got"; exit 1; }
+  echo "limits memory $one MB (all mini VMs $all MB), tasks $VMSLICE_TASKS, cpu weight $VMSLICE_WEIGHT"
+}
+# inslice <n> <command>...: runs the command (and what it leaves running) in mini VM n's slice
+inslice() { n_=$1; shift; systemd-run --scope -q --collect --slice="v2mac-vm$n_.slice" "$@"; }
 # Every container of a mini VM: rootless, no caps, our seccomp (no AF_VSOCK), read-only root.
 # `--rootfs $CTR` goes last, before the command: it makes the next word the root path.
 HARDENED="--cap-drop=all --security-opt no-new-privileges --security-opt seccomp=$SECCOMP --read-only"
@@ -200,8 +220,10 @@ vm-add) # vm-add <n> <id> <disposable 0|1>: (re)make the mini VM's holder contai
   install -d -o app -g app -m700 "/data/vms/$id" "/data/vms/$id/home"
   printf 'nameserver 10.77.%s.1\n' "$n" > "$R/resolv-$n"; chmod 644 "$R/resolv-$n"
   if [ "$4" = 1 ]; then home="--mount type=tmpfs,destination=/root"; else home="-v /data/vms/$id/home:/root"; fi
-  asapp podman run -d --name "vm-$id" --network none $HARDENED $home -v "$R/resolv-$n:/etc/resolv.conf:ro" --rootfs $CTR sleep infinity >/dev/null
+  limits "$n"
+  inslice "$n" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run -d --name "vm-$id" --network none $HARDENED $home -v "$R/resolv-$n:/etc/resolv.conf:ro" --rootfs $CTR sleep infinity >/dev/null
   pid=$(asapp podman inspect -f '{{.State.Pid}}' "vm-$id")
+  grep -q "/v2mac-vm$n.slice/" "/proc/$pid/cgroup" || { echo "mini VM $n runs outside its limits: $(cat /proc/$pid/cgroup)"; exit 1; }
   # The pod makes its own netns (rootless can't join a root-made one); the gateway moves the veth in.
   ip link add "vg$n" type veth peer name "vp$n"
   ip link set "vg$n" netns gw
@@ -241,7 +263,7 @@ app) # app <n> <id> <plugin> <disposable 0|1> <ssh-agent vsock port|0> <image id
   fi
   # xargs appends the plugin's command after --rootfs; with -a the tty stays on stdin.
   # shellcheck disable=SC2086
-  xargs -0 -a "$R/plugin-$id-$p.argv" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm -it \
+  xargs -0 -a "$R/plugin-$id-$p.argv" systemd-run --scope -q --collect --slice="v2mac-vm$n.slice" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm -it \
     --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $ssh -e TERM=xterm-256color \
     --env-file "$R/plugin-$id-$p.env" -v "$R/resolv-$n:/etc/resolv.conf:ro" $(facts "$id") -w /root $root
   ;;
@@ -277,7 +299,7 @@ gui) # gui <token> <n> <id> <plugin> <disposable> <shared> <clipboard> <sound po
   # XCURSOR_PATH: only a transparent cursor, since the Mac draws its own and sway's would be in every frame as a second one.
   # sway loads the theme named "default"; mounted from the VM's root so apps on an earlier base get it too.
   # shellcheck disable=SC2086
-  xargs -0 -a "$R/plugin-$id-$p.argv" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --name "gui-$t" \
+  xargs -0 -a "$R/plugin-$id-$p.argv" systemd-run --scope -q --collect --slice="v2mac-vm$n.slice" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --name "gui-$t" \
     --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $shared $sound -v "$d:/run/vnc" -v /usr/share/v2mac/cursors:/run/cursors:ro \
     -e XDG_RUNTIME_DIR=/run/vnc -e XCURSOR_PATH=/run/cursors -e WLR_BACKENDS=headless -e WLR_RENDERER=pixman -e WLR_LIBINPUT_NO_DEVICES=1 -e LANG=C.UTF-8 -e MOZ_ASSUME_USER_NS=0 \
     --env-file "$R/plugin-$id-$p.env" -v "$R/resolv-$n:/etc/resolv.conf:ro" $(facts "$id") -w /root $root \
@@ -447,9 +469,9 @@ pkg-upgrade-work) # pkg-upgrade-work <n> <id> <base sum>: upgrades a copy of the
 probe) # probe <n> <id> <other n> <other id>: leak probes from mini VM n (plan §9)
   num "$2"; num "$4"
   # a listener in the other mini VM that the probe must not reach
-  asapp podman run -d --rm --name "probe-target-$5" --label "v2mac.vm=$5" --network "container:vm-$5" $HARDENED --rootfs $CTR \
+  inslice "$4" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run -d --rm --name "probe-target-$5" --label "v2mac.vm=$5" --network "container:vm-$5" $HARDENED --rootfs $CTR \
     socat TCP-LISTEN:7777,fork SYSTEM:'echo reached' >/dev/null
-  asapp podman run --rm --label "v2mac.vm=$3" --network "container:vm-$3" $HARDENED -v "$R/resolv-$2:/etc/resolv.conf:ro" --rootfs $CTR \
+  inslice "$2" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --label "v2mac.vm=$3" --network "container:vm-$3" $HARDENED -v "$R/resolv-$2:/etc/resolv.conf:ro" --rootfs $CTR \
     bash /usr/local/lib/v2mac/probe.sh "$2" "$4" || true
   asapp podman rm -f -t0 "probe-target-$5" >/dev/null 2>&1 || true
   ;;

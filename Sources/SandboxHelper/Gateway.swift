@@ -188,7 +188,9 @@ import V2MacCore
               await vm.call(.put(name: "gateway.nft", body: SandboxConfig.gatewayNFT(vms: vms))) == .ok,
               await run(["gateway"] + vms.map { String($0.index) }).ok else { return log("gateway setup failed") }
         for mini in vms where !inGuest.contains(mini.id) {
-            if await run(["vm-add", String(mini.index), mini.id, mini.disposable ? "1" : "0"]).ok { inGuest.insert(mini.id) }
+            // Prints its limits as read back from the kernel (review F10); fails when they are not in force.
+            let added = await run(["vm-add", String(mini.index), mini.id, mini.disposable ? "1" : "0"])
+            if added.ok { inGuest.insert(mini.id); log("\(mini.name): \(added.output.trimmingCharacters(in: .whitespacesAndNewlines))") }
         }
         ready = true
         log("gateway ready with \(vms.count) mini VMs")
