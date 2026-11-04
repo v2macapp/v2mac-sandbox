@@ -158,12 +158,16 @@ limits() {
   mb=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)
   all=$((mb - 512)); one=$((mb * 3 / 4)); [ $one -le $all ] || one=$all
   systemctl set-property --runtime v2mac.slice MemoryMax=${all}M
-  systemctl set-property --runtime "v2mac-vm$1.slice" MemoryMax=${one}M TasksMax=$VMSLICE_TASKS CPUWeight=$VMSLICE_WEIGHT
-  # The slice's cgroup exists once something runs in it.
-  systemd-run --scope -q --collect --slice="v2mac-vm$1.slice" true
-  c=/sys/fs/cgroup/v2mac.slice/v2mac-vm$1.slice
-  got="$(cat /sys/fs/cgroup/v2mac.slice/memory.max $c/memory.max $c/pids.max $c/cpu.weight 2>&1 | tr '\n' ' ')"
-  [ "$got" = "$((all << 20)) $((one << 20)) $VMSLICE_TASKS $VMSLICE_WEIGHT " ] || { echo "limits for mini VM $1 not in force: $got"; exit 1; }
+  # Package installs (inslice pkgs) get a mini VM's share of their own, set here since none runs before a mini VM.
+  for u in "v2mac-vm$1.slice" v2macpkgs.slice; do
+    systemctl set-property --runtime $u MemoryMax=${one}M TasksMax=$VMSLICE_TASKS CPUWeight=$VMSLICE_WEIGHT
+    # The slice's cgroup exists once something runs in it.
+    systemd-run --scope -q --collect --slice=$u true
+  done
+  c=/sys/fs/cgroup/v2mac.slice/v2mac-vm$1.slice k=/sys/fs/cgroup/v2macpkgs.slice
+  got="$(cat /sys/fs/cgroup/v2mac.slice/memory.max $c/memory.max $c/pids.max $c/cpu.weight $k/memory.max $k/pids.max $k/cpu.weight 2>&1 | tr '\n' ' ')"
+  want="$((one << 20)) $VMSLICE_TASKS $VMSLICE_WEIGHT"
+  [ "$got" = "$((all << 20)) $want $want " ] || { echo "limits for mini VM $1 not in force: $got"; exit 1; }
   echo "limits memory $one MB (all mini VMs $all MB), tasks $VMSLICE_TASKS, cpu weight $VMSLICE_WEIGHT"
 }
 # inslice <n|pkgs> <command>...: runs the command (and what it leaves running) in mini VM n's slice, or in
