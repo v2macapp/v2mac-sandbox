@@ -155,7 +155,7 @@ struct StoreWindow: View {
         } else if packages.isEmpty {
             if search.isEmpty || searched != search {
                 ContentUnavailableView("Debian Packages", systemImage: "shippingbox",
-                                       description: Text("Type a name or a word. Any program from Debian's archive can be installed."))
+                                       description: Text("Type a name or a word. Any program from Debian's archive can be installed. Debian packages are shared by all mini VMs."))
             } else {
                 ContentUnavailableView.search(text: search)
             }
@@ -402,7 +402,7 @@ private struct PackageDetail: View {
                     action
                 }
                 Text(package.summary).font(.title3)
-                Text("Debian signs the package and checks it on download. It runs inside the mini VM and reaches the internet only through its exit, like every app here, but V2Mac hasn't checked what it does. Window apps it brings appear in the mini VM; command-line tools are in its Terminal.")
+                Text("Debian signs the package and checks it on download. It runs inside the mini VM and reaches the internet only through its exit, like every app here, but V2Mac hasn't checked what it does. Window apps it brings appear in the mini VM; command-line tools are in its Terminal. Debian packages are shared by all mini VMs: installing or updating one here changes it in every mini VM (their data stays separate).")
                     .foregroundStyle(.secondary)
             }
             .padding(32)

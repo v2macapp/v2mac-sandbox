@@ -220,7 +220,7 @@ Api 2 adds `packages`: a recipe whose apps `apt` installs and updates (`first-pl
   Cost: those credentials live in the VM.
 - **Linux Packages** (workspace Phase 10, built 2026-10-24, not yet run in a VM): the store window's
   Debian side searches (`sandbox.sh pkg-search`) and installs (`pkg-install`) any Debian package, apart
-  from the store. All packages share one root, `/data/apps/pkgs/root`: the upper layer of an overlay on
+  from the store. All packages share one root, `/data/apps/pkgs/root` (one for all mini VMs, and the UI says so: decided 2026-11-04, review F04): the upper layer of an overlay on
   `/` while apt runs, and a lower layer (image word `pkgs`) for the apps it brings. Package lists live
   apart in `/data/apps/pkgs/lists`, so search works while apps run. apt runs in a rootless container
   on the target mini VM's network, so downloads go through its exit and `postinst` scripts stay
