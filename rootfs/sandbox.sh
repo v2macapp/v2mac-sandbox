@@ -53,7 +53,7 @@ pkglists() {
   [ -n "$(find $P/lists -maxdepth 1 -name '*_Packages*' -mmin -1440)" ] && return 0
   # Ends before the helper stops waiting (15 minutes), so a slow exit gets apt's own error back.
   # shellcheck disable=SC2086
-  inslice "$1" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --timeout 600 $HARDENED $(aptnet "$1" "$2") --rootfs $CTR apt-get $APT -q update --error-on=any >$R/pkgs.log 2>&1 \
+  inslice pkgs runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --timeout 600 $HARDENED $(aptnet "$1" "$2") --rootfs $CTR apt-get $APT -q update --error-on=any >$R/pkgs.log 2>&1 \
     || { grep -E "^(W|E):" $R/pkgs.log | head -n 5; tail -n 3 $R/pkgs.log; exit 1; }
 }
 # Unmounts every app's view of the packages; each is remounted on next use. Only with nothing running on them.
@@ -96,8 +96,9 @@ aptroot() {
   status=0
   # shellcheck disable=SC2086
   # Its own storage on the data disk, root's: overlayfs can't hold podman's storage on the VM's overlay root.
-  # In the slice of the mini VM it downloads for; --cgroups=disabled keeps root's podman from making its own.
-  inslice "$n" podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --cgroups=disabled --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
+  # Outside every mini VM's slice: a mini VM that fills its own limits can't kill apt halfway through the
+  # shared root. --cgroups=disabled keeps root's podman from making its own cgroup.
+  inslice pkgs podman --root $P/podman --runroot $R/pkgs-podman run --rm --timeout 3000 --cgroups=disabled --uidmap 0:300000:65536 --gidmap 0:300000:65536 --security-opt no-new-privileges --security-opt seccomp=$SECCOMP \
     --network "ns:/proc/$pid/ns/net" -v "$R/resolv-$n:/etc/resolv.conf:ro" -v $P/lists:/var/lib/apt/lists:ro -v $R/pkgs-out:/v2mac-out \
     -e DEBIAN_FRONTEND=noninteractive --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /var/tmp:rw,exec,mode=1777 \
     --rootfs "$a" sh -c "$@" >$R/pkgs.log 2>&1 || status=$?
@@ -165,8 +166,12 @@ limits() {
   [ "$got" = "$((all << 20)) $((one << 20)) $VMSLICE_TASKS $VMSLICE_WEIGHT " ] || { echo "limits for mini VM $1 not in force: $got"; exit 1; }
   echo "limits memory $one MB (all mini VMs $all MB), tasks $VMSLICE_TASKS, cpu weight $VMSLICE_WEIGHT"
 }
-# inslice <n> <command>...: runs the command (and what it leaves running) in mini VM n's slice
-inslice() { n_=$1; shift; systemd-run --scope -q --collect --slice="v2mac-vm$n_.slice" "$@"; }
+# inslice <n|pkgs> <command>...: runs the command (and what it leaves running) in mini VM n's slice, or in
+# v2macpkgs.slice for the shared package root (top level, so not under v2mac.slice's cap either)
+inslice() {
+  if [ "$1" = pkgs ]; then s_=v2macpkgs.slice; else s_="v2mac-vm$1.slice"; fi
+  shift; systemd-run --scope -q --collect --slice="$s_" "$@"
+}
 # Every container of a mini VM: rootless, no caps, our seccomp (no AF_VSOCK), read-only root.
 # `--rootfs $CTR` goes last, before the command: it makes the next word the root path.
 HARDENED="--cap-drop=all --security-opt no-new-privileges --security-opt seccomp=$SECCOMP --read-only"
