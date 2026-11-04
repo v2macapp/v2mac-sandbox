@@ -56,10 +56,14 @@ import V2MacCore
         link.send(.hello(version: SandboxLink.version))
         pty.start()
         quarantine.start()
+        #if DEBUG
         sideloadHook()
         templateHook()
+        #endif
     }
 
+    // Test switches for dev helpers only (`DEV=1 Scripts/build-helper.sh`); a released helper has none.
+    #if DEBUG
     /// `V2MAC_SANDBOX_TEMPLATE=<template id>` with a local `V2MAC_SANDBOX_STORE` (dev testing): makes a
     /// mini VM from that store template with every permission its apps ask for, and logs the outcome.
     private func templateHook() {
@@ -108,6 +112,7 @@ import V2MacCore
             vm.release()
         }
     }
+    #endif
 
     private func handle(_ message: SandboxLink.ToHelper) {
         switch message {

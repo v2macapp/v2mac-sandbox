@@ -1,4 +1,4 @@
-"""Fresh-install check: build-helper.sh, download all three release manifests (and optionally their archives,
+"""Fresh-install check: DEV=1 build-helper.sh, download all three release manifests (and optionally their archives,
 to skip slow downloads) into ../plugin-template/dist,
 then run python3 Scripts/test-sdk.py. Fetches and verifies archives as requested, evicts them after import,
 uses a test signing key and blocked exit, and keeps logs and a GUI frame. Requires gh and Swift on macOS.

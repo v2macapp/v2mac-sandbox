@@ -18,6 +18,6 @@ Plan and every decision: `docs/PLAN.md` (read the section before changing what i
 - On GitHub as `v2macapp/v2mac-sandbox` (private). Push when the user asks or CI needs to see it.
 - `app.lock`: the app commit or tag CI checks out beside this repo. Bump it with every link change.
 - Build: `Scripts/build-agent.sh`, `build-kernel.sh`, `build-rootfs.sh` (Docker, arm64; `PROXY=` for a
-  download proxy), then `build-helper.sh` and `package.sh <url of files.json>` (per-file zips, patches from
+  download proxy), then `build-helper.sh` (`DEV=1` keeps the `V2MAC_SANDBOX_*` test switches; never release that) and `package.sh <url of files.json>` (per-file zips, patches from
   `out/patches/` and `files.json` into `out/release/`, plus `out/pin.json`). `make-patches.sh` is CI's (D2).
   Tag `vX.Y.Z` to release (`.github/workflows/release.yml`). `spikes/` is M0's throwaway code.

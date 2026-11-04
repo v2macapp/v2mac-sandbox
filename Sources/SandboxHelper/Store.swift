@@ -89,19 +89,22 @@ enum Store {
 
     init(root: URL) {
         state = root.appendingPathComponent("store.json")
-        let env = ProcessInfo.processInfo.environment
-        // Debug: `V2MAC_SANDBOX_STORE=http://127.0.0.1:<port>/` and its test key; never a remote store.
-        if let local = env["V2MAC_SANDBOX_STORE"].flatMap(URL.init(string:)), Store.allowsLocal(local), let key = env["V2MAC_SANDBOX_STORE_KEY"] {
-            base = local
-            self.key = key
-        } else {
-            base = Store.indexURL.deletingLastPathComponent()
-            key = Store.publicKey
-        }
+        (base, key) = Self.storeAndKey
         // The last verified index, checked again: revocations hold from the first launch, offline too.
         if let data = try? Data(contentsOf: saved), let sig = try? String(contentsOf: saved.appendingPathExtension("sig"), encoding: .utf8) {
             index = try? Store.verify(index: data, signature: sig, key: key, lastVersion: lastVersion)
         }
+    }
+
+    private static var storeAndKey: (URL, String) {
+        #if DEBUG
+        // Dev helpers only: `V2MAC_SANDBOX_STORE=http://127.0.0.1:<port>/` and its test key; never a remote store.
+        let env = ProcessInfo.processInfo.environment
+        if let local = env["V2MAC_SANDBOX_STORE"].flatMap(URL.init(string:)), Store.allowsLocal(local), let key = env["V2MAC_SANDBOX_STORE_KEY"] {
+            return (local, key)
+        }
+        #endif
+        return (Store.indexURL.deletingLastPathComponent(), Store.publicKey)
     }
 
     private var saved: URL { state.deletingLastPathComponent().appendingPathComponent("store-index.json") }

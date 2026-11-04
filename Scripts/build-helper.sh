@@ -1,16 +1,18 @@
 #!/bin/sh
 # Builds out/V2Mac Sandbox.app: the helper binary, out/Image and out/rootfs.erofs in Resources,
 # ad-hoc signed with the virtualization entitlement (plan: "Packaging").
+# DEV=1 builds a dev helper with the V2MAC_SANDBOX_* test switches (test-recipes.py, test-sdk.py); never release one.
 set -e
 cd "$(dirname "$0")/.."
 for f in out/Image out/rootfs.erofs; do [ -f "$f" ] || { echo "$f missing"; exit 1; }; done
-for p in V2MacSandbox SandboxStub V2MacPty; do swift build -c release --product $p; done
+FLAGS=; [ "$DEV" = 1 ] && FLAGS="-Xswiftc -DDEBUG"
+for p in V2MacSandbox SandboxStub V2MacPty; do swift build -c release $FLAGS --product $p; done
 APP="out/V2Mac Sandbox.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/Info.plist "$APP/Contents/"
 [ -n "$VERSION" ] && plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
-BIN=$(swift build -c release --show-bin-path)
+BIN=$(swift build -c release $FLAGS --show-bin-path)
 cp "$BIN/V2MacSandbox" "$APP/Contents/MacOS/V2Mac Sandbox"
 cp "$BIN/SandboxStub" "$APP/Contents/MacOS/v2mac-stub"
 cp "$BIN/V2MacPty" "$APP/Contents/MacOS/v2mac-pty"

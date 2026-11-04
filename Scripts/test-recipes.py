@@ -1,6 +1,6 @@
 """Real-VM check of store recipes and Debian updates (plan §10): a recipe installs through apt, an upgrade waits for
 open apps and then swaps in, and a new base rebuilds the package root. Needs build-rootfs.sh, build-base.sh and
-build-helper.sh. Runs isolated in a temporary folder, with the host's network as the mini VM's exit; never touches an
+DEV=1 build-helper.sh (the test switches). Runs isolated in a temporary folder, with the host's network as the mini VM's exit; never touches an
 installed V2Mac. Downloads about 300 MB from Debian. Usage: python3 Scripts/test-recipes.py
 """
 import hashlib, json, os, pathlib, re, shutil, socket, struct, subprocess, sys, tempfile, threading, time
