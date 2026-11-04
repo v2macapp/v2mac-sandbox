@@ -489,6 +489,8 @@ import V2MacCore
             log("exit swap failed, restarting the sandbox core: \(error.localizedDescription)")
             return await apply()
         }
+        // Strict switch (review F12, decided 2026-11-04): nothing keeps going out the old exit.
+        relays[mini.index]?.closeAll()
         await checkExit(mini)
     }
 

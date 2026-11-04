@@ -14,6 +14,8 @@ final class RelayListener: NSObject, VZVirtioSocketListenerDelegate, @unchecked 
     static let idle = 600
     private static let open = Mutex<(total: Int, byVM: [ObjectIdentifier: Int], refused: Int)>((0, [:], 0))
 
+    /// Guest ends of the connections open now, so an exit switch can end them (review F12, strict).
+    private let live = Mutex<Set<Int32>>([])
     /// The sandbox core's inbound port; changes when the core restarts.
     nonisolated(unsafe) var port: Int
     let listener = VZVirtioSocketListener()
@@ -41,6 +43,9 @@ final class RelayListener: NSObject, VZVirtioSocketListenerDelegate, @unchecked 
         }
     }
 
+    /// Ends every open connection; the apps reconnect through whatever exit the core has now.
+    func closeAll() { live.withLock { for fd in $0 { shutdown(fd, SHUT_RDWR) } } }
+
     func release() {
         let me = ObjectIdentifier(self)
         Self.open.withLock { open in
@@ -62,7 +67,8 @@ final class RelayListener: NSObject, VZVirtioSocketListenerDelegate, @unchecked 
             close(guest); close(host); release()
             return true // the guest sees the connection close: fail closed
         }
-        Self.pipe(guest, host, idle: Self.idle) { [self] in release() }
+        live.withLock { _ = $0.insert(guest) }
+        Self.pipe(guest, host, idle: Self.idle) { [self] in live.withLock { _ = $0.remove(guest) }; release() }
         return true
     }
 
@@ -105,7 +111,8 @@ final class RelayListener: NSObject, VZVirtioSocketListenerDelegate, @unchecked 
                 group.leave()
             }.start()
         }
-        group.notify(queue: .global()) { close(a); close(b); done() }
+        // done() first: a caller's list of open fds must drop these before the numbers can be reused.
+        group.notify(queue: .global()) { done(); close(a); close(b) }
     }
 }
 
