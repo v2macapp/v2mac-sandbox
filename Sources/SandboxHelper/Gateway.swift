@@ -33,7 +33,6 @@ import V2MacCore
     @ObservationIgnored private var pending: [String: [CheckedContinuation<JSONValue?, Never>]] = [:]
     @ObservationIgnored private var core: CoreRunner?
     @ObservationIgnored private var ports: [String: SandboxConfig.Ports] = [:]
-    @ObservationIgnored private var apiPort = 0
     @ObservationIgnored private let checkPassword = UUID().uuidString
     @ObservationIgnored private var relays: [Int: RelayListener] = [:]
     @ObservationIgnored private var booted = false
@@ -161,14 +160,15 @@ import V2MacCore
         }
         do {
             let free = try PortUtil.freePorts(1 + 2 * vms.count)
-            apiPort = free[0]
             ports = Dictionary(uniqueKeysWithValues: vms.enumerated().map { ($1.id, .init(inbound: free[1 + 2 * $0], check: free[2 + 2 * $0])) })
             let core = self.core ?? CoreRunner(executable: corePath, assetDirectory: root.appendingPathComponent("core"),
                                               runDirectory: root.appendingPathComponent("core/run"))
             self.core = core
             await core.stop()
-            try await core.start(config: SandboxConfig.hostCore(vms: vms, ports: ports, outbounds: outbounds, apiPort: apiPort, checkPassword: checkPassword),
-                                 readyPort: apiPort)
+            guard let apiSocket = core.apiSocket else { return log("sandbox folder path too long for the core's API socket") }
+            // free[0] serves only start's free-port pre-check; readiness comes from the core's log line.
+            try await core.start(config: SandboxConfig.hostCore(vms: vms, ports: ports, outbounds: outbounds, apiSocket: apiSocket, checkPassword: checkPassword),
+                                 readyPort: free[0])
         } catch {
             return log("sandbox core did not start: \(error.localizedDescription)")
         }
@@ -482,7 +482,7 @@ import V2MacCore
         var json: JSONValue?
         if let exit = mini.exit { json = await outbound(for: exit) }
         do {
-            try await core.replaceOutbound(tag: mini.tag, with: SandboxConfig.exitOutbound(json, tag: mini.tag), apiPort: apiPort)
+            try await core.replaceOutbound(tag: mini.tag, with: SandboxConfig.exitOutbound(json, tag: mini.tag))
         } catch {
             log("exit swap failed, restarting the sandbox core: \(error.localizedDescription)")
             return await apply()

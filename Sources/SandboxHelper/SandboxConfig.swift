@@ -58,10 +58,11 @@ enum SandboxConfig {
 
     /// The sandbox core: per mini VM, inbound `vm-<id>` (VLESS, its own UUID) and `check-<id>` both
     /// route to outbound `vm-<id>`, which is the server V2Mac handed out or a blackhole. Unmatched
-    /// traffic hits the first outbound, a blackhole.
-    static func hostCore(vms: [MiniVM], ports: [String: Ports], outbounds: [String: JSONValue], apiPort: Int, checkPassword: String) -> JSONValue {
+    /// traffic hits the first outbound, a blackhole. The API listens on a 0600 Unix socket (`CoreRunner.apiSocket`),
+    /// not a loopback port, so no other user or sandboxed app can swap an exit.
+    static func hostCore(vms: [MiniVM], ports: [String: Ports], outbounds: [String: JSONValue], apiSocket: String, checkPassword: String) -> JSONValue {
         var inbounds: [JSONValue] = [[
-            "tag": "api", "listen": "127.0.0.1", "port": .number(Double(apiPort)),
+            "tag": "api", "listen": .string("\(apiSocket),0600"), "port": 0,
             "protocol": "dokodemo-door", "settings": ["address": "127.0.0.1"],
         ]]
         var outs: [JSONValue] = [["tag": "block", "protocol": "blackhole"]]

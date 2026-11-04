@@ -12,7 +12,7 @@ import V2MacCore
 
     var host: JSONValue {
         SandboxConfig.hostCore(vms: [a, b], ports: ["aaaa": .init(inbound: 2001, check: 2002), "bbbb": .init(inbound: 2003, check: 2004)],
-                               outbounds: ["aaaa": server], apiPort: 2000, checkPassword: "pw")
+                               outbounds: ["aaaa": server], apiSocket: "/run/api.sock", checkPassword: "pw")
     }
 
     @Test func hostCoreRoutesEachMiniVMToItsOwnExitAndBlocksTheRest() throws {
@@ -22,7 +22,8 @@ import V2MacCore
         #expect(outbounds[1]["settings"] == server["settings"])
         #expect(outbounds[2]["protocol"] == "blackhole") // no exit picked: fail closed
         let inbounds = try #require(host["inbounds"]?.arrayValue)
-        #expect(inbounds.allSatisfy { $0["listen"] == "127.0.0.1" })
+        #expect(inbounds[0]["listen"] == "/run/api.sock,0600")
+        #expect(inbounds.dropFirst().allSatisfy { $0["listen"] == "127.0.0.1" })
         #expect(inbounds[1] == ["tag": "vm-aaaa", "listen": "127.0.0.1", "port": 2001, "protocol": "vless",
                                 "settings": ["clients": [["id": "11111111-1111-1111-1111-111111111111"]], "decryption": "none"]])
         #expect(inbounds[2]["settings"]?["auth"] == "password")
