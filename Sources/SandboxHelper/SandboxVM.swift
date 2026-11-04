@@ -31,20 +31,27 @@ import Virtualization
         VZMultipleDirectoryShare(directories: shares.reduce(into: [:]) { $0[$1.key] = VZSharedDirectory(url: $1.value, readOnly: $1.key == "_cache") })
     }
 
-    /// Sends one request to the agent and waits for its answer; nil when the VM is down, the agent
-    /// is reconnecting, or the answer did not come within `timeoutMS`. A failed exchange closes the
-    /// connection and opens a new one, so a late answer is never read as the next request's.
+    /// Sends one request to the agent and waits for its answer; nil when the VM is down or the answer
+    /// did not come within `timeoutMS`. A failed exchange closes the connection and opens a new one, so a
+    /// late answer is never read as the next request's. A request that had not gone out yet waits for the
+    /// new connection (within its own deadline); one that went out is never sent twice.
     func call(_ message: AgentMessage, timeoutMS: Int32 = 180_000) async -> AgentMessage? {
-        guard state == .running, let channel = agent else { return nil }
-        let answer = await withCheckedContinuation { continuation in
-            agentQueue.async { continuation.resume(returning: channel.exchange(message, timeout: .milliseconds(timeoutMS))) }
+        let deadline = ContinuousClock.now + .milliseconds(Int(timeoutMS))
+        while ContinuousClock.now < deadline, state == .running {
+            guard let channel = agent, !channel.isClosed else { try? await Task.sleep(for: .milliseconds(100)); continue }
+            // Only exchanges on agentQueue close a channel, so this check there can't race one.
+            let sent: AgentMessage?? = await withCheckedContinuation { continuation in
+                agentQueue.async { continuation.resume(returning: channel.isClosed ? .none : .some(channel.exchange(message, timeout: deadline - .now))) }
+            }
+            guard let answer = sent else { continue } // an earlier request broke the channel first
+            if answer == nil, channel.isClosed, agent === channel, state == .running {
+                log("the agent did not answer in time or broke the protocol; reconnecting")
+                agent = nil
+                connectAgent(deadline: .now + .seconds(30))
+            }
+            return answer
         }
-        if answer == nil, channel.isClosed, agent === channel, state == .running {
-            log("the agent did not answer in time or broke the protocol; reconnecting")
-            agent = nil
-            connectAgent(deadline: .now + .seconds(30))
-        }
-        return answer
+        return nil
     }
 
     init(root: URL) { self.root = root }
