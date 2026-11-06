@@ -136,6 +136,12 @@ source) is checked against the framebuffer and the size is capped before any wri
   While the app plays or records, the VM bridges that card's other side over a vsock port of the app's
   own; the helper asks the user at the first use (Allow, Don't Allow, Always Allow; per app in the
   Sandbox window) and plays it through AVAudioEngine or records the Mac's mic. Denied means silence.
+  Setting a permission to Don't Allow or Ask, removing the app, or an update without it ends what the open
+  app has now (SSH agent, sound, mic) at once (decided 2026-11-07, review F13).
+- **Safe View** (decided 2026-11-07, review F22): every window app's stub takes any file through Open With or
+  a drop (one window per file). The helper copies it into `<root>/view/<n>/` (the read-only `/exchange/_view`
+  share, deleted when the window closes); `gui` mounts only that folder read-only at `/root/View`, passes the
+  file as the last argument, and runs the app with `--network none` unless it has `shared`.
 - **Target**: smooth at 2× under ~1 core **[verify]**; plan B 1× + macOS scaling; plan C libkrun spike.
 
 ## 6. Plugin API v1
