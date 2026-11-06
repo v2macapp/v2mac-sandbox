@@ -276,12 +276,22 @@ app) # app <n> <id> <plugin> <disposable 0|1> <ssh-agent vsock port|0> <image id
     --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $ssh -e TERM=xterm-256color \
     --env-file "$R/plugin-$id-$p.env" -v "$R/resolv-$n:/etc/resolv.conf:ro" $(facts "$id") -w /root $root
   ;;
-gui) # gui <token> <n> <id> <plugin> <disposable> <shared> <clipboard> <sound port|0> <microphone port|0> <width> <height> <scale> <image id|->:
+gui) # gui <token> <n> <id> <plugin> <disposable> <shared> <clipboard> <sound port|0> <microphone port|0> <width> <height> <scale> <image id|-> <view|0>:
   # a window app under sway, served by wayvnc on $R/gui-<token>/vnc.sock (the agent's session connects there)
   int "$2"; t=$2; shift; num "$2"; n=$2; id=$3; p=$4; int "$8"; int "$9"; int "${10}"; int "${11}"; int "${12}"; root=$(rootof "${13}")
   if [ "$5" = 1 ]; then home="--mount type=tmpfs,destination=/root"; else home="-v /data/vms/$id/home:/root"; fi
   shared=""; [ "$6" = 1 ] && [ -d "/exchange/$id" ] && shared="-v /exchange/$id:/root/Shared"
   d=$R/gui-$t; install -d -o app -g app -m700 "$d"
+  # Safe View (review F22): opened with a file, the app gets that one file read-only as its last argument,
+  # and no network unless it has the Shared permission.
+  argv=$R/plugin-$id-$p.argv; net="container:vm-$id"; view=""; int "${14}"
+  if [ "${14}" != 0 ]; then
+    f=$(find "/exchange/_view/${14}" -mindepth 1 -maxdepth 1 -type f -print -quit)
+    [ -n "$f" ] || { echo "gui $t: no file to view" >&2; exit 2; }
+    view="-v /exchange/_view/${14}:/root/View:ro"
+    { cat "$argv"; printf '/root/View/%s\0' "${f##*/}"; } > "$d.argv"; argv=$d.argv
+    [ "$6" = 1 ] || net=none
+  fi
   # Sound (plan "Audio"): the app gets its own loopback card as card 0, only the granted sides. The VM has
   # no Mac sound device: while the app has a side open, bridge carries it to the helper's port for it,
   # which asks the user before it plays anything or opens the Mac's microphone.
@@ -308,8 +318,8 @@ gui) # gui <token> <n> <id> <plugin> <disposable> <shared> <clipboard> <sound po
   # XCURSOR_PATH: only a transparent cursor, since the Mac draws its own and sway's would be in every frame as a second one.
   # sway loads the theme named "default"; mounted from the VM's root so apps on an earlier base get it too.
   # shellcheck disable=SC2086
-  xargs -0 -a "$R/plugin-$id-$p.argv" systemd-run --scope -q --collect --slice="v2mac-vm$n.slice" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --name "gui-$t" \
-    --label "v2mac.vm=$id" --network "container:vm-$id" $HARDENED $home $shared $sound -v "$d:/run/vnc" -v /usr/share/v2mac/cursors:/run/cursors:ro \
+  xargs -0 -a "$argv" systemd-run --scope -q --collect --slice="v2mac-vm$n.slice" runuser -u app -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR podman run --rm --name "gui-$t" \
+    --label "v2mac.vm=$id" --network "$net" $HARDENED $home $shared $view $sound -v "$d:/run/vnc" -v /usr/share/v2mac/cursors:/run/cursors:ro \
     -e XDG_RUNTIME_DIR=/run/vnc -e XCURSOR_PATH=/run/cursors -e WLR_BACKENDS=headless -e WLR_RENDERER=pixman -e WLR_LIBINPUT_NO_DEVICES=1 -e LANG=C.UTF-8 -e MOZ_ASSUME_USER_NS=0 \
     --env-file "$R/plugin-$id-$p.env" -v "$R/resolv-$n:/etc/resolv.conf:ro" $(facts "$id") -w /root $root \
     sh -c 'sway -c /etc/v2mac/sway.conf >/run/vnc/sway.log 2>&1 & sway=$!
@@ -340,7 +350,7 @@ gui-stop) # gui-stop <token>
   # 30 lines of 300 printable bytes at most, so it can't fill the Mac's disk or put escapes in the log.
   tail -c 65536 "$R/gui-$2.log" 2>/dev/null | grep -avE "dbus|D-Bus|rtkit|pw\.|spa\.|wp-|mod\." | tail -n 30 | cut -c1-300 \
     | LC_ALL=C tr -cd '[:print:]\n' | sed "s/^/gui $2: /" >/dev/console 2>&1 || true
-  rm -rf "$R/gui-$2" "$R/gui-$2.log"
+  rm -rf "$R/gui-$2" "$R/gui-$2.log" "$R/gui-$2.argv"
   for f in "$R"/card-*/token; do [ "$(cat "$f" 2>/dev/null)" = "$2" ] && rm -rf "${f%/token}"; done
   ;;
 exit-facts) # exit-facts <id>: $R/exit-<id>.json becomes /run/v2mac/exit.json in that mini VM's apps (atomic rename)

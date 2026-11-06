@@ -7,19 +7,33 @@ import RFB
     private var window: NSWindow?
     private var view: RFBView?
     private var fd: Int32 = -1
+    /// The file this window views (Safe View, review F22); macOS hands it over before the launch finishes.
+    private var file: URL?
+    private var launched = false
 
     init(socket: String, vm: String, app: String, name: String) {
         self.socket = socket; self.vm = vm; self.app = app; self.name = name
     }
 
+    func application(_ sender: NSApplication, open urls: [URL]) {
+        var urls = urls
+        if !launched, file == nil, !urls.isEmpty { file = urls.removeFirst() }
+        // One file per window: any other opens its own copy of this app.
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        for url in urls { NSWorkspace.shared.open([url], withApplicationAt: Bundle.main.bundleURL, configuration: config) }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        launched = true
         NSApp.mainMenu = menu()
         let screen = NSScreen.main
         let scale = Int(screen?.backingScaleFactor ?? 2) >= 2 ? 2 : 1
         let points = NSSize(width: 1100, height: 720)
         fd = Self.connect(socket)
         guard fd >= 0 else { return fail(String(localized: "V2Mac Sandbox is not running. Open the Sandbox in V2Mac, then open this app again.")) }
-        let line = "gui \(vm) \(app) \(Int(points.width) * scale) \(Int(points.height) * scale) \(scale)\n"
+        let line = "gui \(vm) \(app) \(Int(points.width) * scale) \(Int(points.height) * scale) \(scale)"
+            + (file.map { " " + Data($0.path.utf8).base64EncodedString() } ?? "") + "\n"
         _ = Array(line.utf8).withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
         let socketFD = fd
         Thread.detachNewThread { [weak self] in

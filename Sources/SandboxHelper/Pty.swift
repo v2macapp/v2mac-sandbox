@@ -27,6 +27,13 @@ import Virtualization
         gateway.onRevoke = { [weak self] vm, app, permission in
             for entry in self?.live ?? [] where entry.vm == vm && entry.app == app && entry.permission == permission { entry.forward.revoke() }
         }
+        // A removed app or mini VM, or an update that no longer has the permission, ends it too.
+        gateway.onChange = { [weak self, gateway] in
+            for entry in self?.live ?? [] {
+                let app = gateway.vms.first { $0.id == entry.vm }?.apps.first { $0.id == entry.app }
+                if app?.allows(entry.permission) != true || app?.answers[entry.permission] == false { entry.forward.revoke() }
+            }
+        }
     }
 
     /// Asked-permission forwards of the apps open now, so Don't Allow can end them (review F13).
@@ -34,6 +41,8 @@ import Virtualization
 
 
     func start() {
+        try? FileManager.default.removeItem(at: gateway.viewFolder) // files a crashed helper left open
+        try? FileManager.default.createDirectory(at: gateway.viewFolder, withIntermediateDirectories: true)
         let path = socket.path
         unlink(path)
         let s = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
@@ -60,7 +69,7 @@ import Virtualization
     private nonisolated static func readLine(_ fd: Int32) -> String? {
         var bytes: [UInt8] = []
         var b: UInt8 = 0
-        while bytes.count < 256, read(fd, &b, 1) == 1 {
+        while bytes.count < 4096, read(fd, &b, 1) == 1 {
             if b == 0x0a { return String(decoding: bytes, as: UTF8.self) }
             bytes.append(b)
         }
@@ -74,10 +83,10 @@ import Virtualization
             _ = bytes.withUnsafeBytes { write(c, $0.baseAddress, $0.count) }
             close(c)
         }
-        // pty: "<vm> <app>"; gui: "gui <vm> <app> <width> <height> <scale>"
+        // pty: "<vm> <app>"; gui: "gui <vm> <app> <width> <height> <scale> [<base64 path of a file to view>]"
         let gui = words.first == "gui"
         let ids = gui ? Array(words.dropFirst()) : words
-        guard ids.count == (gui ? 5 : 2), let mini = gateway.vms.first(where: { $0.id == ids[0] }),
+        guard (gui ? [5, 6] : [2]).contains(ids.count), let mini = gateway.vms.first(where: { $0.id == ids[0] }),
               let app = mini.apps.first(where: { $0.id == ids[1] }) ?? (ids[1] == InstalledApp.terminal.id ? .terminal : nil),
               (app.display == "gui") == gui
         else { return reject("this app is no longer in the sandbox.") }
@@ -90,6 +99,15 @@ import Virtualization
                   (64...8192).contains(w), (64...8192).contains(h), [1, 2].contains(scale) else { return reject("bad window size.") }
             size = [String(w), String(h), String(scale)]
         }
+        // Safe View (review F22): an app opened with a file gets only a copy of it, read-only, and no network
+        // unless it has the Shared permission.
+        var view: URL?
+        if ids.count == 6 {
+            guard let data = Data(base64Encoded: ids[5]), let path = String(data: data, encoding: .utf8),
+                  let copy = Self.viewCopy(of: URL(fileURLWithPath: path), in: gateway.viewFolder)
+            else { return reject("that file can't be opened.") }
+            view = copy
+        }
         retain()
         var released = false
         func release() { if !released { released = true; vm.release() } }
@@ -97,7 +115,11 @@ import Virtualization
         guard gateway.ready, let device = vm.socketDevice,
               await vm.call(.put(name: "plugin-\(mini.id)-\(app.id).argv", body: app.argvFile)) == .ok,
               await vm.call(.put(name: "plugin-\(mini.id)-\(app.id).env", body: app.envFile + (gateway.facts[mini.id]?.timezone.map { "TZ=\($0)\n" } ?? ""))) == .ok
-        else { release(); return reject("the sandbox did not start.") }
+        else {
+            release()
+            if let view { try? FileManager.default.removeItem(at: view) }
+            return reject("the sandbox did not start.")
+        }
         // Each asked permission gets its own vsock port while the app is open, so a connection names the
         // app the user is asked about; 0 tells the guest it isn't granted.
         var ports: [String: UInt32] = [:]
@@ -121,13 +143,14 @@ import Virtualization
         let clipboard = app.allows("clipboard")
         let open: AgentMessage = gui
             ? .gui([String(mini.index), mini.id, app.id, flag(mini.disposable), flag(app.allows("shared")), flag(clipboard && mini.pasteIn),
-                    port("sound"), port("microphone")] + size + [app.image ?? "-"])
+                    port("sound"), port("microphone")] + size + [app.image ?? "-", view?.lastPathComponent ?? "0"])
             : .pty([String(mini.index), mini.id, app.id, flag(mini.disposable), port("ssh-agent"), app.image ?? "-"])
         // The stub learns whether it may put the app's copies on the Mac's clipboard, and the title capsule.
         let header = gui ? Array("ok \(flag(clipboard && mini.copyOut)) \(capsule(mini))\n".utf8) : []
         sessions += 1
         let end = { @MainActor [weak self] in
             release()
+            if let view { try? FileManager.default.removeItem(at: view) }
             for port in ports.values { device.removeSocketListener(forPort: port) }
             _ = forwards // a listener holds its delegate weakly: keep them until here
             self?.live.removeAll { entry in forwards.contains { $0 === entry.forward } }
@@ -143,6 +166,21 @@ import Virtualization
             for bytes in [open.frame] { _ = bytes.withUnsafeBytes { write(guest, $0.baseAddress, $0.count) } }
             if !header.isEmpty { _ = header.withUnsafeBytes { write(c, $0.baseAddress, $0.count) } }
             RelayListener.pipe(c, guest) { DispatchQueue.main.async { MainActor.assumeIsolated { end() } } }
+        }
+    }
+
+    /// A copy of a regular file in its own new folder `<folder>/<random number>/`; nil if it isn't one.
+    nonisolated static func viewCopy(of file: URL, in folder: URL) -> URL? {
+        let file = file.resolvingSymlinksInPath()
+        guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
+        let dir = folder.appendingPathComponent(String(UInt32.random(in: 1...UInt32.max)), isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
+            try FileManager.default.copyItem(at: file, to: dir.appendingPathComponent(file.lastPathComponent))
+            return dir
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
         }
     }
 

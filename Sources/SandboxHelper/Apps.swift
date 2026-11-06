@@ -260,6 +260,9 @@ enum StubApps {
             "V2MacSocket": socket.path, "V2MacVM": vm.id, "V2MacApp": app.id, "V2MacDisplay": app.display,
             "V2MacStub": currentStub ?? "",
         ]
+            // A window app opens any file through Open With or a drop on its icon, in Safe View (review F22).
+            .merging(app.display == "gui" ? ["CFBundleDocumentTypes": [["CFBundleTypeRole": "Viewer", "LSHandlerRank": "Alternate",
+                                                                      "LSItemContentTypes": ["public.data"]]]] : [:]) { a, _ in a }
         try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
             .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
         // The stub's own texts: the helper's compiled String Catalog.

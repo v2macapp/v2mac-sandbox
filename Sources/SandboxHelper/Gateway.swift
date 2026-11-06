@@ -11,7 +11,7 @@ import V2MacCore
         case ok(String)
     }
 
-    private(set) var vms: [MiniVM] = []
+    private(set) var vms: [MiniVM] = [] { didSet { onChange?() } }
     private(set) var servers: [SandboxLink.Server] = []
     private(set) var activeServer: String?
     private(set) var exits: [String: ExitStatus] = [:]
@@ -252,9 +252,14 @@ import V2MacCore
     /// Layers V2Mac downloaded, seen read-only in the VM as `/exchange/_cache` for `podman load`.
     var layerCache: URL { root.appendingPathComponent("cache", isDirectory: true) }
 
+    /// Files opened in a window app for Safe View (review F22), one folder per open window, seen read-only
+    /// in the VM as `/exchange/_view`.
+    var viewFolder: URL { root.appendingPathComponent("view", isDirectory: true) }
+
     private func updateShares() {
         try? FileManager.default.createDirectory(at: layerCache, withIntermediateDirectories: true)
-        var shares: [String: URL] = ["_cache": layerCache]
+        try? FileManager.default.createDirectory(at: viewFolder, withIntermediateDirectories: true)
+        var shares: [String: URL] = ["_cache": layerCache, "_view": viewFolder]
         for mini in vms {
             let folder = sharedFolder(mini)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -297,6 +302,8 @@ import V2MacCore
     }
     /// Set by the pty server: ends an open app's use of a permission that is no longer always allowed (review F13).
     @ObservationIgnored var onRevoke: ((_ vm: String, _ app: String, _ permission: String) -> Void)?
+    /// Set by the pty server: mini VMs or their apps changed, so open apps' permissions may have gone (review F13).
+    @ObservationIgnored var onChange: (() -> Void)?
 
     /// A store install in progress, by `installKey`: `fraction` while downloading, nil while loading.
     struct Install: Equatable {

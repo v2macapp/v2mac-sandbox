@@ -194,7 +194,7 @@ struct SandboxWindow: View {
     static let permissionText = [
         "ssh-agent": String(localized: "Use the SSH keys in your Mac's ssh-agent, after asking you"),
         "clipboard": String(localized: "Use the clipboard"),
-        "shared": String(localized: "Read and write this mini VM's Shared folder"),
+        "shared": String(localized: "Read and write this mini VM's Shared folder. Without it, a file you open with the app is the only one it sees, and it has no network while it does"),
         "sound": String(localized: "Play sound, after asking you"),
         "microphone": String(localized: "Use the microphone, after asking you"),
     ]

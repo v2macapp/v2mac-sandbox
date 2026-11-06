@@ -28,7 +28,7 @@ import Virtualization
         didSet { (vm?.directorySharingDevices.first as? VZVirtioFileSystemDevice)?.share = share }
     }
     private var share: VZMultipleDirectoryShare {
-        VZMultipleDirectoryShare(directories: shares.reduce(into: [:]) { $0[$1.key] = VZSharedDirectory(url: $1.value, readOnly: $1.key == "_cache") })
+        VZMultipleDirectoryShare(directories: shares.reduce(into: [:]) { $0[$1.key] = VZSharedDirectory(url: $1.value, readOnly: $1.key.hasPrefix("_")) })
     }
 
     /// Sends one request to the agent and waits for its answer; nil when the VM is down or the answer
