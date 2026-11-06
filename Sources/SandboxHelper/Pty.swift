@@ -1,6 +1,7 @@
 import AgentProtocol
 import AppKit
 import AVFoundation
+import Synchronization
 import Virtualization
 
 /// The pty bridge (plan §5 `pty`): `v2mac-pty` in Terminal connects to `pty.sock`, names a mini VM
@@ -23,7 +24,13 @@ import Virtualization
         self.retain = retain
         asks = PermissionAsk(gateway: gateway)
         socket = root.appendingPathComponent("pty.sock")
+        gateway.onRevoke = { [weak self] vm, app, permission in
+            for entry in self?.live ?? [] where entry.vm == vm && entry.app == app && entry.permission == permission { entry.forward.revoke() }
+        }
     }
+
+    /// Asked-permission forwards of the apps open now, so Don't Allow can end them (review F13).
+    private var live: [(vm: String, app: String, permission: String, forward: SessionForward)] = []
 
 
     func start() {
@@ -98,7 +105,7 @@ import Virtualization
         for permission in PluginManifest.askedPermissions where app.allows(permission) && (permission == "ssh-agent") != gui {
             let port = nextPort
             nextPort = port == AgentMessage.sessionPorts.upperBound ? AgentMessage.sessionPorts.lowerBound : port + 1
-            let serve: @Sendable (Int32) -> Void = switch permission {
+            let serve: @Sendable (Int32, @escaping @Sendable () -> Void) -> Void = switch permission {
             case "sound": MacAudio.play
             case "microphone": MacAudio.record
             default: SessionForward.sshAgent
@@ -107,6 +114,7 @@ import Virtualization
             device.setSocketListener(forward.listener, forPort: port)
             ports[permission] = port
             forwards.append(forward)
+            live.append((mini.id, app.id, permission, forward))
         }
         let port = { String(ports[$0] ?? 0) }
         let flag = { $0 ? "1" : "0" }
@@ -122,6 +130,7 @@ import Virtualization
             release()
             for port in ports.values { device.removeSocketListener(forPort: port) }
             _ = forwards // a listener holds its delegate weakly: keep them until here
+            self?.live.removeAll { entry in forwards.contains { $0 === entry.forward } }
             self?.sessions -= 1
         }
         device.connect(toPort: gui ? AgentMessage.guiPort : AgentMessage.ptyPort) { result in
@@ -175,7 +184,7 @@ import Virtualization
         case "microphone": String(localized: "\(app.name) in \(mini.name) wants to use the microphone.")
         default: String(localized: "\(app.name) in \(mini.name) wants to use the SSH keys in your Mac's ssh-agent.")
         }
-        alert.informativeText = String(localized: "Allow holds until the app is closed. Always Allow and Don't Allow can be changed in the app's menu in the Sandbox window.")
+        alert.informativeText = String(localized: "Allow holds until the app is closed. Always Allow and Don't Allow can be changed in the app's menu in the Sandbox window; Don't Allow ends it at once.")
         alert.icon = NSWorkspace.shared.icon(forFile: StubApps.url(app, in: mini).path)
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don't Allow")).keyEquivalent = "\u{1b}"
@@ -191,14 +200,17 @@ import Virtualization
 
 /// One open app's use of an asked permission on its own vsock port: the guest connects when the app
 /// uses it, the user is asked at the first connection (that answer holds while the app is open), and an
-/// allowed connection goes to `serve`, which owns and closes it.
+/// allowed connection goes to `serve`, which owns and closes it and calls `done` just before it closes.
 final class SessionForward: NSObject, VZVirtioSocketListenerDelegate, @unchecked Sendable {
     let listener = VZVirtioSocketListener()
     private let ask: @MainActor () async -> Bool
-    private let serve: @Sendable (Int32) -> Void
+    private let serve: @Sendable (Int32, @escaping @Sendable () -> Void) -> Void
     @MainActor private var answer: Task<Bool, Never>?
+    @MainActor private var generation = 0
+    /// Guest ends being served now; `done` drops one before `serve` closes it, so its number can't be reused here.
+    private let live = Mutex<Set<Int32>>([])
 
-    init(ask: @escaping @MainActor () async -> Bool, serve: @escaping @Sendable (Int32) -> Void) {
+    init(ask: @escaping @MainActor () async -> Bool, serve: @escaping @Sendable (Int32, @escaping @Sendable () -> Void) -> Void) {
         self.ask = ask
         self.serve = serve
         super.init()
@@ -209,24 +221,36 @@ final class SessionForward: NSObject, VZVirtioSocketListenerDelegate, @unchecked
                   from socketDevice: VZVirtioSocketDevice) -> Bool {
         let guest = dup(connection.fileDescriptor)
         connection.close()
-        Task { @MainActor in
-            if answer == nil { answer = Task { await ask() } }
-            guard await answer!.value else { close(guest); return }
-            serve(guest)
-        }
+        Task { @MainActor in await accept(guest) }
         return true
     }
 
+    @MainActor func accept(_ guest: Int32) async {
+        let asked = generation
+        if answer == nil { answer = Task { await ask() } }
+        guard await answer!.value, asked == generation else { close(guest); return }
+        live.withLock { _ = $0.insert(guest) }
+        serve(guest) { [self] in live.withLock { _ = $0.remove(guest) } }
+    }
+
+    /// Review F13: the permission was set to Don't Allow or Ask. What the app has open ends now, and its
+    /// next use asks again (and so gets the new answer).
+    @MainActor func revoke() {
+        generation += 1
+        answer = nil
+        live.withLock { for fd in $0 { shutdown(fd, SHUT_RDWR) } }
+    }
+
     /// The guest's end of an app's ssh-agent to the Mac's `SSH_AUTH_SOCK`.
-    static let sshAgent: @Sendable (Int32) -> Void = { guest in
-        guard let path = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"], path.utf8.count < 104 else { close(guest); return }
+    static let sshAgent: @Sendable (Int32, @escaping @Sendable () -> Void) -> Void = { guest, done in
+        guard let path = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"], path.utf8.count < 104 else { done(); close(guest); return }
         let s = socket(AF_UNIX, SOCK_STREAM, 0)
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &addr.sun_path) { p in for (i, ch) in path.utf8.enumerated() { p[i] = ch } }
         let ok = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } } == 0
-        guard ok else { close(s); close(guest); return }
-        RelayListener.pipe(guest, s)
+        guard ok else { close(s); done(); close(guest); return }
+        RelayListener.pipe(guest, s, done: done)
     }
 }
 
@@ -235,14 +259,14 @@ final class SessionForward: NSObject, VZVirtioSocketListenerDelegate, @unchecked
 enum MacAudio {
     static let wire = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 2, interleaved: true)!
 
-    static func play(_ fd: Int32) {
+    static func play(_ fd: Int32, done: @escaping @Sendable () -> Void) {
         Thread.detachNewThread {
             let engine = AVAudioEngine()
             let player = AVAudioPlayerNode()
             let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: format)
-            defer { player.stop(); engine.stop(); close(fd) }
+            defer { player.stop(); engine.stop(); done(); close(fd) }
             guard (try? engine.start()) != nil else { return log("could not start the Mac's sound output") }
             player.play()
             let frames = 960 // 20 ms
@@ -262,13 +286,13 @@ enum MacAudio {
     }
 
     /// The Mac's microphone is open only while this runs.
-    static func record(_ fd: Int32) {
+    static func record(_ fd: Int32, done: @escaping @Sendable () -> Void) {
         Thread.detachNewThread {
             let engine = AVAudioEngine()
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
             guard format.sampleRate > 0, let converter = AVAudioConverter(from: format, to: wire) else {
-                close(fd)
+                done(); close(fd)
                 return log("no microphone, or V2Mac Sandbox may not use it (System Settings → Privacy & Security → Microphone)")
             }
             if format.channelCount == 1 { converter.channelMap = [0, 0] }
@@ -284,13 +308,13 @@ enum MacAudio {
                 }
                 _ = write(fd, out.int16ChannelData![0], Int(out.frameLength) * 4)
             }
-            guard (try? engine.start()) != nil else { close(fd); return log("could not start the Mac's microphone") }
+            guard (try? engine.start()) != nil else { done(); close(fd); return log("could not start the Mac's microphone") }
             // The guest sends nothing; its close ends the recording.
             var byte: UInt8 = 0
             while read(fd, &byte, 1) > 0 {}
             input.removeTap(onBus: 0)
             engine.stop()
-            close(fd)
+            done(); close(fd)
         }
     }
 

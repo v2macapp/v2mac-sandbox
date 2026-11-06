@@ -293,7 +293,10 @@ import V2MacCore
         update(mini.id) { vm in
             if let i = vm.apps.firstIndex(where: { $0.id == app.id }) { vm.apps[i].answers[permission] = answer }
         }
+        if answer != true { onRevoke?(mini.id, app.id, permission) }
     }
+    /// Set by the pty server: ends an open app's use of a permission that is no longer always allowed (review F13).
+    @ObservationIgnored var onRevoke: ((_ vm: String, _ app: String, _ permission: String) -> Void)?
 
     /// A store install in progress, by `installKey`: `fraction` while downloading, nil while loading.
     struct Install: Equatable {
