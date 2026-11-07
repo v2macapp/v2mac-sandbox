@@ -37,6 +37,8 @@ mmdebstrap --variant=minbase --mode=root --aptopt='Acquire::Retries "5"' "$@" \
   --customize-hook='echo sandbox > "$1/etc/hostname"' \
   `# mmdebstrap keeps --aptopt here: a build proxy would be every app's apt proxy in the VM.` \
   --customize-hook='rm -f "$1/etc/apt/apt.conf.d/99mmdebstrap"' \
+  `# Every Debian package and version in this root, published with the release.` \
+  --customize-hook='chroot "$1" dpkg-query -W -f "\${Package} \${Version} \${Architecture}\n" > /work/out/rootfs-packages.txt' \
   --customize-hook='rm -rf "$1/usr/share/doc" "$1/usr/share/man" "$1/var/cache/apt"/* "$1/var/lib/apt/lists"/*' \
   `# Security and stable updates too: apps and plugins install from this root's sources.` \
   trixie /tmp/root 'deb http://deb.debian.org/debian trixie main' 'deb http://deb.debian.org/debian trixie-updates main' 'deb http://deb.debian.org/debian-security trixie-security main'

@@ -12,8 +12,8 @@ jobs:
     needs: image
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: image, path: out }
       - run: Scripts/build-base.sh
       - name: Push to GHCR and list the digest plugins may build FROM
@@ -29,51 +29,52 @@ jobs:
           gh release download -p bases.json -O out/images/last-bases.json || true
           Scripts/merge-bases.py "$digest" Resources/released-bases.json out/images/last-bases.json > out/images/bases.json
           cat out/images/bases.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: bases, path: out/images/bases.json }
   image:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { path: sandbox }
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: sandbox/Scripts/build-agent.sh && sandbox/Scripts/build-kernel.sh && sandbox/Scripts/build-rootfs.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: image
           path: |
             sandbox/out/Image
             sandbox/out/rootfs.erofs
+            sandbox/out/rootfs-packages.txt
   patches:
     needs: image
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: image, path: out }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq bsdiff
       - env: { GH_TOKEN: "${{ github.token }}" }
         run: Scripts/make-patches.sh "${{ github.ref_name }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: patches, path: out/patches, if-no-files-found: ignore }
   helper:
     needs: [image, bases, patches]
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { path: sandbox }
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: image, path: sandbox/out }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: bases, path: sandbox/out/images }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true # no earlier release, no patches
         with: { name: patches, path: sandbox/out/patches }
       - working-directory: sandbox
@@ -87,4 +88,4 @@ jobs:
           VERSION=${VERSION#v} Scripts/build-helper.sh
           Scripts/package.sh "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/files.json"
           ../app/Scripts/sign-update.swift out/pin.json
-          gh release create "${{ github.ref_name }}" out/release/* out/pin.json out/pin.json.sig out/images/bases.json --title "${{ github.ref_name }}" --notes "Pin: \`$(cat out/pin.json)\`"
+          gh release create "${{ github.ref_name }}" out/release/* out/pin.json out/pin.json.sig out/images/bases.json out/rootfs-packages.txt --title "${{ github.ref_name }}" --notes "Pin: \`$(cat out/pin.json)\`"

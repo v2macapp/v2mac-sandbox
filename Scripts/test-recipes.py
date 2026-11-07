@@ -51,7 +51,7 @@ apt-get update -qq && apt-get install -y -qq erofs-utils >/dev/null
 fsck.erofs --extract=/tmp/r --preserve /in/rootfs.erofs
 {edit}
 mkfs.erofs -zlz4hc /out/{name}.erofs /tmp/r >/dev/null'''
-    subprocess.run(['docker', 'run', '--rm', '--privileged', '--platform', 'linux/arm64', '-v', f'{here}/out:/in:ro', '-v', f'{root}:/out', 'debian:trixie', 'sh', '-ec', script], check=True)
+    subprocess.run(['docker', 'run', '--rm', '--privileged', '--platform', 'linux/arm64', '-v', f'{here}/out:/in:ro', '-v', f'{root}:/out', 'debian:trixie@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6', 'sh', '-ec', script], check=True)
     return out
 
 # Always check: a test can't wait a day for the lists or the daily stamp to go stale.

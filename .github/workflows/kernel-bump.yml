@@ -5,12 +5,12 @@ name: Kernel bump
 on:
   schedule: [{ cron: "0 6 * * 1" }]
   workflow_dispatch:
-permissions: { contents: write, pull-requests: write }
+permissions: { contents: write, pull-requests: write, issues: write }
 jobs:
   bump:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - id: v
         run: |
           cur=$(cat kernel/VERSION)
@@ -20,11 +20,17 @@ jobs:
           [ -n "$new" ] && [ "$new" != "$cur" ] && echo "new=$new" >> "$GITHUB_OUTPUT" || echo "up to date ($cur)"
       - if: steps.v.outputs.new
         run: |
-          echo "${{ steps.v.outputs.new }}" > kernel/VERSION
+          new=${{ steps.v.outputs.new }}
+          echo "$new" > kernel/VERSION
+          # kernel.org's checksum list, signed by the stable maintainers; the reviewer checks it against the signature.
+          curl -sf https://cdn.kernel.org/pub/linux/kernel/v${new%%.*}.x/sha256sums.asc | awk -v f="linux-$new.tar.xz" '$2 == f { print $1 }' > kernel/SHA256
+          [ -s kernel/SHA256 ]
           Scripts/build-kernel.sh
           b=kernel-${{ steps.v.outputs.new }}
           git config user.name github-actions; git config user.email github-actions@users.noreply.github.com
           git switch -c "$b" && git commit -am "Bump the guest kernel to ${{ steps.v.outputs.new }}" && git push -u origin "$b"
-          gh pr create --fill --body "Built in CI. Before merging, boot it and run the leak probes on a Mac."
+          body="Built in CI. Before merging, check kernel/SHA256 against kernel.org's signed sha256sums.asc, boot it and run the leak probes on a Mac."
+          # Repos that don't let Actions open PRs (the 6.18.60 failure, review S6.2) get an issue instead.
+          gh pr create --fill --body "$body" || gh issue create --title "Kernel $new is ready on branch $b" --body "$body Open a PR from \`$b\`."
         env:
           GH_TOKEN: ${{ github.token }}

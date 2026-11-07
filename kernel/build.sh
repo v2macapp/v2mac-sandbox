@@ -6,7 +6,11 @@ V=$(cat /work/kernel/VERSION)
 command -v make >/dev/null || { apt-get update -qq && apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev curl xz-utils >/dev/null; }
 mkdir -p /work/out
 [ -f /work/out/linux-$V.tar.xz ] || curl -sfL -o /work/out/linux-$V.tar.xz https://cdn.kernel.org/pub/linux/kernel/v${V%%.*}.x/linux-$V.tar.xz
-cd /build && [ -d linux-$V ] || tar xJf /work/out/linux-$V.tar.xz
+# The tarball must match kernel/SHA256 (from kernel.org's signed sha256sums.asc, reviewed in the bump PR).
+echo "$(cat /work/kernel/SHA256)  /work/out/linux-$V.tar.xz" | sha256sum -c - || { rm -f /work/out/linux-$V.tar.xz; exit 1; }
+# A cached tree is used only if it came from this exact tarball.
+cd /build && [ "$(cat linux-$V/.v2mac-sha256 2>/dev/null)" = "$(cat /work/kernel/SHA256)" ] || {
+  rm -rf linux-$V && tar xJf /work/out/linux-$V.tar.xz && cat /work/kernel/SHA256 > linux-$V/.v2mac-sha256; }
 cd linux-$V
 make allnoconfig >/dev/null
 scripts/kconfig/merge_config.sh -m .config /work/kernel/config.fragment >/dev/null

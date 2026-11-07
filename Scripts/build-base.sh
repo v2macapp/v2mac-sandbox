@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")/.."
 [ -f out/rootfs.erofs ] || { echo "out/rootfs.erofs missing: run Scripts/build-rootfs.sh first"; exit 1; }
 mkdir -p out/images
-docker run --rm --platform linux/arm64 ${PROXY:+-e http_proxy=$PROXY -e https_proxy=$PROXY} -v "$PWD/out":/out debian:trixie sh -ec '
+docker run --rm --platform linux/arm64 ${PROXY:+-e http_proxy=$PROXY -e https_proxy=$PROXY} -v "$PWD/out":/out debian:trixie@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6 sh -ec '
   apt-get update -qq && apt-get install -y -qq erofs-utils >/dev/null
   fsck.erofs --extract=/tmp/root --preserve /out/rootfs.erofs
   tar -C /tmp/root --numeric-owner --sort=name -cf /out/images/base-root.tar .'

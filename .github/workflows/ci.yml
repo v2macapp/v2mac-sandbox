@@ -4,21 +4,21 @@ jobs:
   test:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { path: sandbox }
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: swift test
         working-directory: sandbox
   agent:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { path: sandbox }
       - id: app
         run: echo "ref=$(cat sandbox/app.lock)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { repository: v2macapp/v2mac, ref: "${{ steps.app.outputs.ref }}", path: app }
       - run: sandbox/Scripts/build-agent.sh
