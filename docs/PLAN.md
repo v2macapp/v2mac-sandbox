@@ -91,6 +91,10 @@ gateway relays, VNC and pty forwarding; accepts a fixed message set from the hel
 agent from outside (rootless `--memory` is ignored), and the pod's own netns, into which the agent moves
 the gateway's veth (rootless can't join a root-made netns). Verified in M0 0.5. The kernel is built
 without io_uring and the profile denies it too: `IORING_OP_SOCKET` would open AF_VSOCK past the `socket` rule.
+Apps run as uid 0 without capabilities in that namespace. Nested user namespaces can be made but not mapped
+(`uid_map` write: EPERM, checked 2026-11-07, review F09/S4.8), so Chromium's own sandbox can't start and
+Chromium refuses it as root anyway: it runs with `--no-sandbox`, said in its Security Notes. Turning it on
+needs a non-root app uid with a mapped sub-range; not planned yet.
 
 ## 4. Network: gateway and per-VM exits
 ```
