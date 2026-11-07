@@ -25,6 +25,8 @@ Every app opens as its own Mac app, and nothing it does reaches the internet exc
 
 Open a browser in a mini VM that leaves from Frankfurt, a terminal in another that leaves from Tokyo, and keep your Mac on your normal connection. Each mini VM is cut off from your Mac's files, your network and every other mini VM. If its server stops working, its apps go offline; they never fall back to your normal connection.
 
+A mini VM is a set of containers that share one Linux kernel, inside one VM that has no network device: your Mac stays outside that VM, but a bug in its kernel could let one mini VM reach another. Linux packages are shared by all mini VMs, and Chromium's own sandbox is off. All limits: [Known Limitations](https://github.com/v2macapp/v2mac/wiki/Known-Limitations).
+
 The sandbox is part of [**V2Mac**](https://github.com/v2macapp/v2mac). This repo holds everything V2Mac downloads the first time you open it: the helper app, the VM agent, the kernel and the Debian image. Users who never open the sandbox download nothing.
 
 ## Get it
