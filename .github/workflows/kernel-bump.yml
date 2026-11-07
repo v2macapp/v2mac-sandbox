@@ -17,20 +17,25 @@ jobs:
           new=$(curl -sf https://www.kernel.org/releases.json | jq -r --arg s "${cur%.*}." \
             '[.releases[] | select(.version | startswith($s)) | .version][0] // empty')
           echo "cur=$cur" >> "$GITHUB_OUTPUT"
-          [ -n "$new" ] && [ "$new" != "$cur" ] && echo "new=$new" >> "$GITHUB_OUTPUT" || echo "up to date ($cur)"
+          # The value ends up in shell, a branch name and a commit: digits and dots only.
+          echo "$new" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' || { echo "no newer release ($cur)"; exit 0; }
+          [ "$new" != "$cur" ] && echo "new=$new" >> "$GITHUB_OUTPUT" || echo "up to date ($cur)"
       - if: steps.v.outputs.new
         run: |
-          new=${{ steps.v.outputs.new }}
-          echo "$new" > kernel/VERSION
-          # kernel.org's checksum list, signed by the stable maintainers; the reviewer checks it against the signature.
-          curl -sf https://cdn.kernel.org/pub/linux/kernel/v${new%%.*}.x/sha256sums.asc | awk -v f="linux-$new.tar.xz" '$2 == f { print $1 }' > kernel/SHA256
+          echo "$NEW" > kernel/VERSION
+          # kernel.org's checksum list, signed by its offline autosigner (kernel/autosigner.gpg, from kernel.org's pgpkeys.git).
+          # gpgv prints the text even when the signature is bad, so only its exit status counts.
+          curl -sf -o /tmp/sums.asc "https://cdn.kernel.org/pub/linux/kernel/v${NEW%%.*}.x/sha256sums.asc"
+          gpgv --keyring "$PWD/kernel/autosigner.gpg" --output /tmp/sums.txt /tmp/sums.asc
+          awk -v f="linux-$NEW.tar.xz" '$2 == f { print $1 }' /tmp/sums.txt > kernel/SHA256
           [ -s kernel/SHA256 ]
           Scripts/build-kernel.sh
-          b=kernel-${{ steps.v.outputs.new }}
+          b="kernel-$NEW"
           git config user.name github-actions; git config user.email github-actions@users.noreply.github.com
-          git switch -c "$b" && git commit -am "Bump the guest kernel to ${{ steps.v.outputs.new }}" && git push -u origin "$b"
-          body="Built in CI. Before merging, check kernel/SHA256 against kernel.org's signed sha256sums.asc, boot it and run the leak probes on a Mac."
+          git switch -c "$b" && git commit -am "Bump the guest kernel to $NEW" && git push -u origin "$b"
+          body="Built in CI; kernel/SHA256 comes from kernel.org's sha256sums.asc, checked with gpgv. Before merging, boot it and run the leak probes on a Mac."
           # Repos that don't let Actions open PRs (the 6.18.60 failure, review S6.2) get an issue instead.
-          gh pr create --fill --body "$body" || gh issue create --title "Kernel $new is ready on branch $b" --body "$body Open a PR from \`$b\`."
+          gh pr create --fill --body "$body" || gh issue create --title "Kernel $NEW is ready on branch $b" --body "$body Open a PR from \`$b\`."
         env:
           GH_TOKEN: ${{ github.token }}
+          NEW: ${{ steps.v.outputs.new }}
