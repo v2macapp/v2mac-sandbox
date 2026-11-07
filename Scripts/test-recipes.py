@@ -169,7 +169,7 @@ try:
     print('   installed Firefox', before, 'and the recipe layer is on top', flush=True)
     # Review F10: the agent read its limits back, and the app runs under them.
     print('  ', helper.wait_log(r'limits memory \d+ MB[^\n]*').group(0), flush=True)
-    group = re.search(r'^0::(\S*)', ask(pty, 'cat /proc/self/cgroup', 'CGEND'), re.M).group(1)
+    group = re.search(r'0::(/\S*)', ask(pty, 'cat /proc/self/cgroup', 'CGEND')).group(1)
     # A private cgroup namespace shows only "/": the holder's check in the agent then is the only proof.
     assert 'v2mac-vm' in group or group == '/', 'the app runs outside its slice: ' + group
     print('   app cgroup', group if group != '/' else '/ (namespaced: INCONCLUSIVE from inside, the agent checks the holder)', flush=True)
