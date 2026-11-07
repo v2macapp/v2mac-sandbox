@@ -97,13 +97,15 @@ public enum AgentMessage: Equatable, Sendable {
         public mutating func feed(_ bytes: some Collection<UInt8>) throws(Invalid) -> [AgentMessage] {
             buffer += bytes
             var messages: [AgentMessage] = []
-            while buffer.count >= 4 {
-                let length = buffer[0..<4].reduce(0) { $0 << 8 | Int($1) }
+            var i = 0 // dropped once per feed, not per message (quadratic)
+            defer { buffer.removeFirst(i) }
+            while buffer.count - i >= 4 {
+                let length = buffer[i..<(i + 4)].reduce(0) { $0 << 8 | Int($1) }
                 guard length <= AgentMessage.maxFrame else { throw Invalid() }
-                guard buffer.count >= 4 + length else { break }
-                guard let message = AgentMessage(text: String(decoding: buffer[4..<(4 + length)], as: UTF8.self)) else { throw Invalid() }
+                guard buffer.count - i >= 4 + length else { break }
+                guard let message = AgentMessage(text: String(decoding: buffer[(i + 4)..<(i + 4 + length)], as: UTF8.self)) else { throw Invalid() }
                 messages.append(message)
-                buffer.removeFirst(4 + length)
+                i += 4 + length
             }
             return messages
         }
@@ -189,9 +191,12 @@ public struct RFBClientFilter: Sendable {
             handshakeLeft -= n
             if handshakeLeft > 0 { return out }
         }
-        while let length = try messageLength() {
-            let message = Array(buffer[0..<length])
-            buffer.removeFirst(length)
+        // Bytes are dropped once per feed: dropping them per message is quadratic in a read of small events.
+        var start = 0
+        defer { buffer.removeFirst(start) }
+        while let length = try messageLength(at: start) {
+            let message = Array(buffer[start..<(start + length)])
+            start += length
             switch message[0] {
             case 250: out.append(.text(String(decoding: message[5...], as: UTF8.self)))
             case 252: out.append(.resize(width: Int(message[1]) << 8 | Int(message[2]), height: Int(message[3]) << 8 | Int(message[4]), scale: Int(message[5])))
@@ -202,26 +207,28 @@ public struct RFBClientFilter: Sendable {
         return out
     }
 
-    /// The whole first message's size, nil while it is incomplete.
-    private func messageLength() throws(AgentMessage.Invalid) -> Int? {
-        guard let type = buffer.first else { return nil }
-        func u16(_ at: Int) -> Int { Int(buffer[at]) << 8 | Int(buffer[at + 1]) }
+    /// The size of the whole message at `start`, nil while it is incomplete.
+    private func messageLength(at start: Int) throws(AgentMessage.Invalid) -> Int? {
+        guard start < buffer.count else { return nil }
+        let type = buffer[start]
+        let available = buffer.count - start
+        func u16(_ at: Int) -> Int { Int(buffer[start + at]) << 8 | Int(buffer[start + at + 1]) }
         func u32(_ at: Int) -> Int { u16(at) << 16 | u16(at + 2) }
         let length: Int
         switch type {
         case 0: length = 20 // SetPixelFormat
-        case 2: guard buffer.count >= 4 else { return nil }; length = 4 + 4 * u16(2) // SetEncodings
+        case 2: guard available >= 4 else { return nil }; length = 4 + 4 * u16(2) // SetEncodings
         case 3: length = 10 // FramebufferUpdateRequest
         case 4: length = 8 // KeyEvent
         case 5: length = 6 // PointerEvent
         case 6, 250: // ClientCutText, our text
             let head = type == 6 ? 8 : 5
-            guard buffer.count >= head else { return nil }
+            guard available >= head else { return nil }
             guard u32(head - 4) <= Self.maxText else { throw AgentMessage.Invalid() }
             length = head + u32(head - 4)
         case 252: length = 6
         default: throw AgentMessage.Invalid()
         }
-        return buffer.count >= length ? length : nil
+        return available >= length ? length : nil
     }
 }
