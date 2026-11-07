@@ -167,7 +167,8 @@ import Virtualization
             // Hop to the main queue before the next connect: a connect from inside a handler crashes VZ (M0 0.4).
             DispatchQueue.main.async {
                 if let connection = said {
-                    self.agent = AgentChannel(fd: connection.fileDescriptor) { connection.close() }
+                    // Captures `said`, not `connection`: Xcode 26.6 rejects sending the non-Sendable connection.
+                    self.agent = AgentChannel(fd: connection.fileDescriptor) { said?.close() }
                     self.state = .running
                 } else if ContinuousClock.now < deadline {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.connectAgent(deadline: deadline) }
