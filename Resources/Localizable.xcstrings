@@ -881,28 +881,6 @@
         }
       }
     },
-    "Read and write this mini VM's Shared folder": {
-      "localizations": {
-        "fa": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "خواندن و نوشتن در پوشهٔ Shared این ماشین مجازی کوچک"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "读写此迷你虚拟机的 Shared 文件夹"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Читать и записывать папку Shared этой мини-ВМ"
-          }
-        }
-      }
-    },
     "Remove %@": {
       "localizations": {
         "fa": {
@@ -3169,28 +3147,6 @@
         }
       }
     },
-    "Allow holds until the app is closed. Always Allow and Don't Allow can be changed in the app's menu in the Sandbox window.": {
-      "localizations": {
-        "fa": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«اجازه بده» تا بسته شدن برنامه معتبر است. «همیشه اجازه بده» و «اجازه نده» را می‌توانید در منوی برنامه در پنجرهٔ سندباکس تغییر دهید."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“允许”在关闭该应用前有效。“始终允许”和“不允许”可在沙盒窗口中该应用的菜单里更改。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Разрешить» действует, пока приложение открыто. «Всегда разрешать» и «Не разрешать» можно изменить в меню приложения в окне песочницы."
-          }
-        }
-      }
-    },
     "Always Allow": {
       "localizations": {
         "fa": {
@@ -3521,28 +3477,6 @@
         }
       }
     },
-    "Type a name or a word. Any program from Debian's archive can be installed.": {
-      "localizations": {
-        "fa": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "یک نام یا کلمه بنویسید. هر برنامه‌ای از آرشیو دبیان قابل نصب است."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "输入名称或关键词。Debian 软件库中的任何程序都可以安装。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Введите название или слово. Можно установить любую программу из архива Debian."
-          }
-        }
-      }
-    },
     "From Debian, not reviewed by V2Mac": {
       "localizations": {
         "fa": {
@@ -3561,28 +3495,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Из Debian, не проверено V2Mac"
-          }
-        }
-      }
-    },
-    "Debian signs the package and checks it on download. It runs inside the mini VM and reaches the internet only through its exit, like every app here, but V2Mac hasn't checked what it does. Window apps it brings appear in the mini VM; command-line tools are in its Terminal.": {
-      "localizations": {
-        "fa": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "دبیان بسته را امضا می‌کند و هنگام دانلود بررسی می‌شود. مثل همهٔ برنامه‌های اینجا داخل مینی‌VM اجرا می‌شود و فقط از طریق خروجی آن به اینترنت می‌رسد، اما V2Mac کار آن را بررسی نکرده است. برنامه‌های پنجره‌دار آن در مینی‌VM ظاهر می‌شوند و ابزارهای خط فرمان در ترمینال آن هستند."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Debian 对软件包签名，下载时会进行校验。它和这里的所有应用一样在迷你虚拟机内运行，只通过其出口访问互联网，但 V2Mac 未检查它的行为。它带来的窗口应用会出现在迷你虚拟机中；命令行工具在其终端中。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Debian подписывает пакет, подпись проверяется при загрузке. Как и все приложения здесь, он работает в мини-ВМ и выходит в интернет только через её выход, но V2Mac не проверял, что он делает. Оконные приложения из него появятся в мини-ВМ, а утилиты командной строки — в её Терминале."
           }
         }
       }
@@ -3829,24 +3741,266 @@
         }
       }
     },
-    "V2Mac reviewed its settings. Its Debian packages (%@) are signed and updated by Debian.": {
+    "Allow holds until the app is closed. Always Allow and Don't Allow can be changed in the app's menu in the Sandbox window; Don't Allow ends it at once.": {
       "localizations": {
         "fa": {
           "stringUnit": {
             "state": "translated",
-            "value": "V2Mac تنظیماتش را بررسی کرده است. بسته‌های Debian آن (%@) توسط Debian امضا و به‌روزرسانی می‌شوند."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "V2Mac проверил его настройки. Его пакеты Debian (%@) подписывает и обновляет Debian."
+            "value": "«اجازه بده» تا بسته شدن برنامه معتبر است. «همیشه اجازه بده» و «اجازه نده» را می‌توانید در منوی برنامه در پنجرهٔ سندباکس تغییر دهید؛ «اجازه نده» آن را فوراً قطع می‌کند."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "V2Mac 审核了它的设置。它的 Debian 软件包（%@）由 Debian 签名和更新。"
+            "value": "“允许”在关闭该应用前有效。“始终允许”和“不允许”可在沙盒窗口中该应用的菜单里更改；“不允许”会立即终止它。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Разрешить» действует, пока приложение открыто. «Всегда разрешать» и «Не разрешать» можно изменить в меню приложения в окне песочницы; «Не разрешать» прекращает доступ сразу."
+          }
+        }
+      }
+    },
+    "Choose what to copy to your Mac": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "انتخاب کنید چه چیزی به مک کپی شود"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择要复制到 Mac 的内容"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите, что скопировать на Mac"
+          }
+        }
+      }
+    },
+    "Debian signs the package and checks it on download. It runs inside the mini VM and reaches the internet only through its exit, like every app here, but V2Mac hasn't checked what it does. Window apps it brings appear in the mini VM; command-line tools are in its Terminal. Debian packages are shared by all mini VMs: installing or updating one here changes it in every mini VM (their data stays separate).": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "دبیان بسته را امضا می‌کند و هنگام دانلود بررسی می‌شود. مثل همهٔ برنامه‌های اینجا داخل ماشین مجازی کوچک اجرا می‌شود و فقط از طریق خروجی آن به اینترنت می‌رسد، اما V2Mac کار آن را بررسی نکرده است. برنامه‌های پنجره‌دار آن در ماشین مجازی کوچک ظاهر می‌شوند و ابزارهای خط فرمان در ترمینال آن هستند. بسته‌های دبیان بین همهٔ ماشین‌های مجازی کوچک مشترک‌اند: نصب یا به‌روزرسانی یکی در اینجا آن را در همهٔ ماشین‌های مجازی کوچک تغییر می‌دهد (داده‌هایشان جدا می‌ماند)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debian 对软件包签名，下载时会进行校验。它和这里的所有应用一样在迷你虚拟机内运行，只通过其出口访问互联网，但 V2Mac 未检查它的行为。它带来的窗口应用会出现在迷你虚拟机中；命令行工具在其终端中。Debian 软件包由所有迷你虚拟机共享：在这里安装或更新一个软件包，会在每个迷你虚拟机中改变它（它们的数据仍各自独立）。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debian подписывает пакет, подпись проверяется при загрузке. Как и все приложения здесь, он работает в мини-ВМ и выходит в интернет только через её выход, но V2Mac не проверял, что он делает. Оконные приложения из него появятся в мини-ВМ, а утилиты командной строки — в её Терминале. Пакеты Debian общие для всех мини-ВМ: установка или обновление пакета здесь меняет его во всех мини-ВМ (их данные остаются раздельными)."
+          }
+        }
+      }
+    },
+    "Export copies a file to your Mac marked as downloaded, so macOS checks it before it opens. Apps also need the clipboard permission to use the clipboard.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«خروجی گرفتن» فایل را با نشان «دانلودشده» به مک کپی می‌کند، تا macOS پیش از باز شدن آن را بررسی کند. برنامه‌ها برای استفاده از کلیپ‌بورد به مجوز کلیپ‌بورد هم نیاز دارند."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“导出”会把文件复制到 Mac 并标记为已下载，macOS 会在打开前检查它。应用还需要剪贴板权限才能使用剪贴板。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Экспорт» копирует файл на Mac с пометкой «загружено», и macOS проверяет его перед открытием. Приложениям также нужно разрешение на буфер обмена."
+          }
+        }
+      }
+    },
+    "Export…": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خروجی گرفتن…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导出…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экспорт…"
+          }
+        }
+      }
+    },
+    "Files the mini VMs write are not being marked as downloaded. Use Export to copy them to your Mac.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "فایل‌هایی که ماشین‌های مجازی کوچک می‌نویسند نشان «دانلودشده» نمی‌گیرند. برای کپی آن‌ها به مک از «خروجی گرفتن» استفاده کنید."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "迷你虚拟机写入的文件未被标记为已下载。请使用“导出”把它们复制到 Mac。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файлы, которые записывают мини-ВМ, не помечаются как загруженные. Чтобы скопировать их на Mac, используйте «Экспорт»."
+          }
+        }
+      }
+    },
+    "Only files and folders inside this mini VM's Shared folder can be exported.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "فقط فایل‌ها و پوشه‌های داخل پوشهٔ Shared این ماشین مجازی کوچک قابل خروجی گرفتن هستند."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只能导出此迷你虚拟机 Shared 文件夹中的文件和文件夹。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экспортировать можно только файлы и папки из папки Shared этой мини-ВМ."
+          }
+        }
+      }
+    },
+    "Read and write this mini VM's Shared folder. Without it, a file you open with the app is the only one it sees, and it has no network while it does": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خواندن و نوشتن در پوشهٔ Shared این ماشین مجازی کوچک. بدون آن، فایلی که با این برنامه باز می‌کنید تنها فایلی است که می‌بیند، و تا وقتی آن را باز دارد شبکه ندارد"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读写此迷你虚拟机的 Shared 文件夹。没有此权限时，应用只能看到你用它打开的那个文件，并且在打开期间没有网络"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Читать и записывать папку Shared этой мини-ВМ. Без этого приложение видит только файл, который вы открыли в нём, и пока он открыт, у него нет сети"
+          }
+        }
+      }
+    },
+    "Type a name or a word. Any program from Debian's archive can be installed. Debian packages are shared by all mini VMs.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "یک نام یا کلمه بنویسید. هر برنامه‌ای از آرشیو دبیان قابل نصب است. بسته‌های دبیان بین همهٔ ماشین‌های مجازی کوچک مشترک‌اند."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入名称或关键词。Debian 软件库中的任何程序都可以安装。Debian 软件包由所有迷你虚拟机共享。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите название или слово. Можно установить любую программу из архива Debian. Пакеты Debian общие для всех мини-ВМ."
+          }
+        }
+      }
+    },
+    "V2Mac reviewed its settings. Its Debian packages (%@) are signed and updated by Debian, and shared by all mini VMs.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac تنظیماتش را بررسی کرده است. بسته‌های Debian آن (%@) توسط Debian امضا و به‌روزرسانی می‌شوند و بین همهٔ ماشین‌های مجازی کوچک مشترک‌اند."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac 审核了它的设置。它的 Debian 软件包（%@）由 Debian 签名和更新，并由所有迷你虚拟机共享。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V2Mac проверил его настройки. Его пакеты Debian (%@) подписывает и обновляет Debian, и они общие для всех мини-ВМ."
+          }
+        }
+      }
+    },
+    "“%@” could not be marked as downloaded, so it was not exported.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» نشان «دانلودشده» نگرفت، پس خروجی گرفته نشد."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”无法标记为已下载，因此未导出。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» не удалось пометить как загруженный, поэтому он не экспортирован."
+          }
+        }
+      }
+    },
+    "“%@” could not be marked as downloaded, so macOS won't warn before opening it. Use Export to copy files to your Mac.": {
+      "localizations": {
+        "fa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» نشان «دانلودشده» نگرفت، پس macOS پیش از باز کردنش هشدار نمی‌دهد. برای کپی فایل‌ها به مک از «خروجی گرفتن» استفاده کنید."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”无法标记为已下载，macOS 打开前不会警告。请使用“导出”把文件复制到 Mac。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» не удалось пометить как загруженный, поэтому macOS не предупредит перед его открытием. Чтобы скопировать файлы на Mac, используйте «Экспорт»."
           }
         }
       }
