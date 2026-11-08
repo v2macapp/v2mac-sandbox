@@ -64,23 +64,27 @@ import V2MacCore
 
     // Test switches for dev helpers only (`DEV=1 Scripts/build-helper.sh`); a released helper has none.
     #if DEBUG
-    /// `V2MAC_SANDBOX_TEMPLATE=<template id>` with a local `V2MAC_SANDBOX_STORE` (dev testing): makes a
-    /// mini VM from that store template with every permission its apps ask for, and logs the outcome.
+    /// `V2MAC_SANDBOX_TEMPLATE=<template or plugin id>` with a local `V2MAC_SANDBOX_STORE` (dev testing): installs
+    /// that template's plugins, or that one plugin, with every permission they ask for into the mini VM of the
+    /// same name (made if missing, so a second run with a newer index updates in place), and logs the outcome.
     private func templateHook() {
         guard let id = ProcessInfo.processInfo.environment["V2MAC_SANDBOX_TEMPLATE"] else { return }
         vm.retain(ramCapMB: ramCapMB)
         Task {
             for _ in 0..<900 where !gateway.ready || gateway.servers.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
             await store.refresh(force: true)
-            guard let template = store.index?.templates.first(where: { $0.id == id }) else {
+            // What the Store window lists.
+            log("store index \(store.index.map { "v\($0.version): " + $0.plugins.map { "\($0.id) \($0.version)" }.joined(separator: ", ") } ?? "none")")
+            let template = store.index?.templates.first { $0.id == id }
+            guard let name = template?.name ?? store.index?.plugin(id)?.name else {
                 vm.release()
                 return log("template \(id): \(store.problem ?? "not in the index")")
             }
-            guard !store.isExpired, let mini = gateway.add(name: template.name) else {
+            guard !store.isExpired, let mini = gateway.vms.first(where: { $0.name == name }) ?? gateway.add(name: name) else {
                 vm.release()
-                return log("template \(id): the index has expired, nothing installed")
+                return log("template \(id): \(store.isExpired ? "the index has expired" : "no mini VM \(name)"), nothing installed")
             }
-            for plugin in template.plugins.compactMap({ store.index?.plugin($0) }) {
+            for plugin in (template?.plugins ?? [id]).compactMap({ store.index?.plugin($0) }) {
                 do {
                     try await gateway.install(store: plugin, granted: plugin.permissions ?? [], in: mini, download: model.download)
                     log("template \(id): installed \(plugin.id) \(plugin.version) into \(mini.name) (\(mini.id))")
