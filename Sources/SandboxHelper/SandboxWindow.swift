@@ -254,6 +254,14 @@ private struct VMDetail<Actions: View>: View {
     private var gateway: Gateway { model.gateway }
     private var status: Gateway.ExitStatus { gateway.exits[vm.id] ?? .unknown }
 
+    /// Runs of servers from the same V2Mac group (custom configs, then each subscription).
+    private var serverSections: [EnumeratedSequence<[(name: String, servers: [SandboxLink.Server])]>.Element] {
+        Array(gateway.servers.reduce(into: [(name: String, servers: [SandboxLink.Server])]()) { sections, server in
+            let name = server.group ?? ""
+            if sections.last?.name == name { sections[sections.count - 1].servers.append(server) } else { sections.append((name, [server])) }
+        }.enumerated())
+    }
+
     var body: some View {
         Form {
             Section { header }
@@ -261,7 +269,13 @@ private struct VMDetail<Actions: View>: View {
                 Picker(selection: Binding(get: { vm.exit }, set: { gateway.setExit(vm, $0) })) {
                     Label("No exit (blocked)", systemImage: "nosign").tag(String?.none)
                     Divider()
-                    ForEach(gateway.servers, id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                    ForEach(serverSections, id: \.offset) { section in
+                        Section {
+                            ForEach(section.element.servers, id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                        } header: {
+                            if !section.element.name.isEmpty { Text(section.element.name) }
+                        }
+                    }
                 } label: {
                     Label("Server", systemImage: "point.3.connected.trianglepath.dotted")
                 }
