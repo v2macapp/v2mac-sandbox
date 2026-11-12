@@ -70,7 +70,8 @@ public enum AgentMessage: Equatable, Sendable {
             self = .put(name: String(rest[1]), body: String(rest[2]))
         case ("run", 2...), ("pty", 2...), ("gui", 2...):
             let args = words.dropFirst().map(String.init)
-            guard args.allSatisfy(Self.isWord) else { return nil }
+            // Not `.` or `..` either: sandbox.sh puts ids into paths it deletes (`rm -rf /data/vms/<id>`).
+            guard args.allSatisfy({ Self.isWord($0) && $0 != "." && $0 != ".." }) else { return nil }
             self = switch words[0] { case "run": .run(args); case "pty": .pty(args); default: .gui(args) }
         case ("result", 2...):
             guard let status = Int(rest[1]) else { return nil }

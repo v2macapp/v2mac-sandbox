@@ -29,6 +29,15 @@ struct MiniVM: Codable, Identifiable, Equatable, Sendable {
         let id = String(UUID().uuidString.prefix(8)).lowercased()
         return MiniVM(id: id, name: name, index: index, uuid: UUID().uuidString.lowercased(), exit: exit)
     }
+
+    /// `name`, or `name 2`, `name 3`… when another mini VM has it: its apps' Mac apps are named after it
+    /// (`StubApps.url`), so two mini VMs of one name would share them. Compared as the file names are.
+    static func unique(_ name: String, among vms: [MiniVM]) -> String {
+        let used = Set(vms.map { StubApps.fileName($0.name) })
+        var candidate = name, n = 2
+        while used.contains(StubApps.fileName(candidate)) { candidate = "\(name) \(n)"; n += 1 }
+        return candidate
+    }
 }
 
 extension MiniVM {

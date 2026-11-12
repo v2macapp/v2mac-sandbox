@@ -20,7 +20,8 @@ import Testing
     @Test func refusesUnknownAndOversizedFrames() {
         for text in ["reboot", "hello", "hello x", "shutdown now", "", "put /etc/passwd x", "put xray.json",
                      "run", "run a;reboot", "run $(x)", "run a  b", "result x y",
-                     "pty", "pty a;b", "put plugin-.argv x", "put plugin-a/b.env x", "put plugin-..argv x", "put plugin-a.sh x"] {
+                     "pty", "pty a;b", "put plugin-.argv x", "put plugin-a/b.env x", "put plugin-..argv x", "put plugin-a.sh x",
+                     "run vm-del 1 ..", "run wipe .", "run clone a .."] {
             var reader = AgentMessage.Reader()
             let body = Array(text.utf8)
             #expect(throws: AgentMessage.Invalid.self) { try reader.feed([0, 0, 0, UInt8(body.count)] + body) }

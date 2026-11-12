@@ -176,9 +176,18 @@ func servePty(_ c: Int32) -> Never {
     else { posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0) }
     posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0)
     posix_spawn_file_actions_adddup2(&actions, 1, 2)
+    // The window session ignores SIGPIPE (a script that stops reading its input must not end it); its scripts get the default back.
+    var attributes = posix_spawnattr_t()
+    posix_spawnattr_init(&attributes)
+    defer { posix_spawnattr_destroy(&attributes) }
+    var pipeSignal = sigset_t()
+    sigemptyset(&pipeSignal)
+    sigaddset(&pipeSignal, SIGPIPE)
+    posix_spawnattr_setsigdefault(&attributes, &pipeSignal)
+    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSIGDEF))
     var pid: pid_t = 0
     var cargs = (["/bin/sh", "/usr/local/lib/v2mac/sandbox.sh"] + words).map { strdup($0) } + [nil]
-    let spawned = posix_spawn(&pid, "/bin/sh", &actions, nil, &cargs, [nil])
+    let spawned = posix_spawn(&pid, "/bin/sh", &actions, &attributes, &cargs, [nil])
     if fds[0] >= 0 { close(fds[0]); if let input { writeAll(fds[1], input) }; close(fds[1]) }
     guard spawned == 0 else { return -1 }
     if wait { var status: Int32 = 0; while waitpid(pid, &status, 0) < 0 && errno == EINTR {} }
@@ -210,6 +219,8 @@ func connectUnix(_ path: String) -> Int32 {
 func serveGui(_ c: Int32) -> Never {
     // words: <n> <id> <plugin> <disposable> <shared> <clipboard> <sound port|0> <microphone port|0> <width> <height> <scale> <image|-> <view|0>
     guard case .gui(let words)? = readFrame(c), words.count == 13 else { exit(1) }
+    // Typed text goes to gui-type on a pipe: if that script ends early, the write fails instead of killing this session.
+    signal(SIGPIPE, SIG_IGN)
     let token = String(getpid())
     let app = script(["gui", token] + words, wait: false)
     let started = time(nil)

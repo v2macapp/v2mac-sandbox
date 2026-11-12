@@ -155,7 +155,7 @@ import V2MacCore
             model.start = { [weak self] in guard let self else { return }; vm.boot(ramCapMB: ramCapMB) }
             model.openStore = { [weak self] in self?.showStore(for: $0) }
         }
-        if window?.isVisible != true { vm.retain(ramCapMB: ramCapMB) }
+        if !Self.isOpen(window) { vm.retain(ramCapMB: ramCapMB) }
         Task { await store.refresh() } // plan §7: when the window opens, at most daily
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
@@ -178,12 +178,15 @@ import V2MacCore
             storeWindow = window
         }
         // Installing needs the VM up, also when the Sandbox window is closed meanwhile.
-        if storeWindow?.isVisible != true { vm.retain(ramCapMB: ramCapMB) }
+        if !Self.isOpen(storeWindow) { vm.retain(ramCapMB: ramCapMB) }
         Task { await store.refresh() }
         NSApp.setActivationPolicy(.regular)
         storeWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
+
+    /// Open, and so holding the VM: a minimized window is not visible but still holds it until it closes.
+    private static func isOpen(_ window: NSWindow?) -> Bool { window?.isVisible == true || window?.isMiniaturized == true }
 
     public func windowWillClose(_ notification: Notification) {
         vm.release()

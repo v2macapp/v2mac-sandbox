@@ -19,4 +19,12 @@ import Testing
         // Reinstalling a package replaces its own apps.
         #expect(InstalledApp.discovered(package: "firefox-esr", output: line("firefox-esr", "Firefox"), granted: [], besides: [firefox]).count == 1)
     }
+
+    /// The Mac app is named after the app, so a second app of the same name (any case) gets a number.
+    @Test func duplicateNamesGetANumber() {
+        let firefox = InstalledApp(package: "firefox-esr", line: Substring(line("firefox-esr", "Firefox")), granted: [])!
+        let output = [line("fx", "firefox"), line("fx2", "Firefox"), line("tool", "Tool")].joined(separator: "\n")
+        let apps = InstalledApp.discovered(package: "other", output: output, granted: [], besides: [firefox])
+        #expect(apps.map(\.name) == ["firefox 2", "Firefox 3", "Tool"])
+    }
 }

@@ -174,11 +174,20 @@ struct InstalledApp: Codable, Identifiable, Equatable, Sendable {
     }
 
     /// The apps of `pkg-install`'s answer, leaving out any whose id another app of the mini VM (`existing`)
-    /// or an earlier line already has (review F05): a package never takes another app's place.
+    /// or an earlier line already has (review F05): a package never takes another app's place. A name another
+    /// app already has gets a number, since the Mac app is named after it (`StubApps.url`).
     static func discovered(package: String, output: String, granted: [String], besides existing: [InstalledApp]) -> [InstalledApp] {
-        var taken = Set(existing.filter { $0.package != package }.map(\.id))
+        let others = existing.filter { $0.package != package }
+        var taken = Set(others.map(\.id))
+        var names = Set(others.map { StubApps.fileName($0.name) })
         return output.split(separator: "\n").compactMap { InstalledApp(package: package, line: $0, granted: granted) }
             .filter { taken.insert($0.id).inserted }
+            .map { app in
+                var app = app, n = 2
+                let base = app.name
+                while !names.insert(StubApps.fileName(app.name)).inserted { app.name = "\(base) \(n)"; n += 1 }
+                return app
+            }
     }
 
     /// Every mini VM's own shell, with nothing to install: the VM's root and no permissions. Its id
@@ -224,9 +233,13 @@ enum StubApps {
     }
 
     static func url(_ app: InstalledApp, in vm: MiniVM) -> URL {
-        func safe(_ s: String) -> String { s.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") }
-        return folder.appendingPathComponent("\(safe(app.name)) — \(safe(vm.name)).app", isDirectory: true)
+        folder.appendingPathComponent("\(safe(app.name)) — \(safe(vm.name)).app", isDirectory: true)
     }
+
+    private static func safe(_ s: String) -> String { s.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") }
+
+    /// A name as its part of a Mac app's file name compares on a case-insensitive disk.
+    static func fileName(_ name: String) -> String { safe(name).lowercased() }
 
     /// The helper's stub, which a generated app records so a helper update can tell it is out of date.
     static var currentStub: String? {

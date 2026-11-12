@@ -30,7 +30,10 @@ import V2MacCore
     @ObservationIgnored private let vm: SandboxVM
     @ObservationIgnored private let root: URL
     @ObservationIgnored private var work: Task<Void, Never>?
-    @ObservationIgnored private var pending: [String: [CheckedContinuation<JSONValue?, Never>]] = [:]
+    /// Outbound requests waiting for V2Mac's answer, by server; each has its own deadline.
+    @ObservationIgnored private var pending: [String: [(id: UUID, continuation: CheckedContinuation<JSONValue?, Never>)]] = [:]
+    /// Mini VMs `add` handed out whose setup is still queued: their index and name are taken.
+    @ObservationIgnored private var adding: [MiniVM] = []
     @ObservationIgnored private var core: CoreRunner?
     @ObservationIgnored private var ports: [String: SandboxConfig.Ports] = [:]
     @ObservationIgnored private let checkPassword = UUID().uuidString
@@ -117,16 +120,20 @@ import V2MacCore
 
     func received(id: String, json: String?) {
         let value = json.flatMap { try? JSONValue.parse(Data($0.utf8)) }
-        pending.removeValue(forKey: id)?.forEach { $0.resume(returning: value) }
+        pending.removeValue(forKey: id)?.forEach { $0.continuation.resume(returning: value) }
     }
 
     private func outbound(for server: String) async -> JSONValue? {
-        await withCheckedContinuation { continuation in
-            pending[server, default: []].append(continuation)
+        let id = UUID()
+        return await withCheckedContinuation { continuation in
+            pending[server, default: []].append((id, continuation))
             if pending[server]?.count == 1 { requestOutbound(server) }
             Task {
                 try? await Task.sleep(for: .seconds(10))
-                self.pending.removeValue(forKey: server)?.forEach { $0.resume(returning: nil) }
+                // Only this request's own wait ends: a later one for the same server keeps its full 10 seconds.
+                guard let i = self.pending[server]?.firstIndex(where: { $0.id == id }) else { return }
+                self.pending[server]?.remove(at: i).continuation.resume(returning: nil)
+                if self.pending[server]?.isEmpty == true { self.pending[server] = nil }
             }
         }
     }
@@ -209,15 +216,22 @@ import V2MacCore
 
     /// Adds a mini VM (Empty, or Clone of `source`); returns it before it is set up in the VM.
     @discardableResult func add(cloning source: MiniVM? = nil, name: String? = nil) -> MiniVM? {
-        let name = name ?? source.map { "\($0.name) copy" } ?? "Mini VM \(vms.count + 1)"
-        guard var mini = MiniVM.new(name: name, exit: source?.exit ?? activeServer, taken: vms) else { return nil }
+        let taken = vms + adding
+        let name = name ?? source.map { "\($0.name) copy" } ?? "Mini VM \(taken.count + 1)"
+        guard var mini = MiniVM.new(name: MiniVM.unique(name, among: taken), exit: source?.exit ?? activeServer, taken: taken) else { return nil }
         mini.apps = source?.apps ?? []
-        enqueue {
+        // Taken until its queued setup ran (or was dropped with the VM down), so a second add can't get the same index.
+        adding.append(mini)
+        let setup = enqueue {
             if let source, !(await self.run(["clone", source.id, mini.id]).ok) { return }
             for app in mini.apps { try? StubApps.make(app, in: mini, socket: self.ptySocket) }
             self.vms.append(mini)
             self.save()
             await self.apply()
+        }
+        Task {
+            await setup.value
+            self.adding.removeAll { $0.id == mini.id }
         }
         return mini
     }
@@ -280,8 +294,16 @@ import V2MacCore
         guard (manifest.packages ?? []).isEmpty else { throw PluginManifest.Invalid("\(manifest.name) needs Debian packages, which only the V2Mac store installs.") }
         guard let current = vms.first(where: { $0.id == mini.id }) else { return }
         let app = InstalledApp(manifest, granted: granted)
+        try Self.checkName(app, in: current)
         try StubApps.make(app, in: current, socket: ptySocket)
         put(app, in: mini.id)
+    }
+
+    /// Two apps of one name would share one Mac app (`StubApps.url`).
+    private static func checkName(_ app: InstalledApp, in mini: MiniVM) throws {
+        guard !mini.apps.contains(where: { $0.id != app.id && StubApps.fileName($0.name) == StubApps.fileName(app.name) }) else {
+            throw PluginManifest.Invalid("\(mini.name) already has an app called \(app.name). Remove it first, or install into another mini VM.")
+        }
     }
 
     /// Adds or replaces an app; an update keeps the answers for permissions it still has.
@@ -320,6 +342,7 @@ import V2MacCore
     func install(store manifest: PluginManifest, granted: [String], in mini: MiniVM, download: @escaping (PluginManifest.Layer) async -> URL?) async throws {
         let key = Self.installKey(mini, manifest.id)
         guard installs[key] == nil else { return }
+        if let current = vms.first(where: { $0.id == mini.id }) { try Self.checkName(InstalledApp(manifest, granted: granted), in: current) }
         let layers = manifest.layers ?? []
         let total = Double(max(1, layers.reduce(0) { $0 + $1.size }))
         var done: Int64 = 0
@@ -547,8 +570,8 @@ import V2MacCore
             if !self.ready { await self.apply() }
             guard self.ready else { return self.report.append("FAIL setup the gateway is not ready") }
             guard let exit = self.activeServer ?? self.servers.first?.id else { return self.report.append("FAIL setup V2Mac has no share-link server") }
-            guard let a = MiniVM.new(name: "Probe A", exit: exit, taken: self.vms),
-                  let b = MiniVM.new(name: "Probe B", exit: exit, taken: self.vms + [a]) else { return self.report.append("FAIL setup no free index") }
+            guard let a = MiniVM.new(name: "Probe A", exit: exit, taken: self.vms + self.adding),
+                  let b = MiniVM.new(name: "Probe B", exit: exit, taken: self.vms + self.adding + [a]) else { return self.report.append("FAIL setup no free index") }
             self.report.append("INFO exit server \(self.servers.first { $0.id == exit }?.name ?? exit)")
             self.vms += [a, b]
             await self.apply()
